@@ -707,11 +707,13 @@ export async function fetchFeedData(force = false): Promise<IntelItem[]> {
           .then(xml => parseRSSFeed(xml, "vgc")),
     },
     {
-      key: "leakr_cache_gameranx",
+      key: "leakr_cache_gameranx_v2",
       fetcher: () =>
         fetch("/api/feed/gameranx")
-          .then(r => { if (!r.ok) throw new Error("gameranx " + r.status); return r.text(); })
-          .then(xml => parseRSSFeed(xml, "gameranx")),
+          .then(r => { if (!r.ok) throw new Error("gameranx " + r.status); return r.json(); })
+          .then(({ xml, thumbnails }: { xml: string; thumbnails: Record<string, string> }) =>
+            parseRSSFeed(xml, "gameranx", thumbnails),
+          ),
     },
   ];
 

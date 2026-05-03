@@ -336,7 +336,12 @@ router.get("/feed/vgc", async (req, res) => {
   }
 });
 
-// ── RSS: Gameranx ────────────────────────────────────────────────────────────
+// ── RSS: Gameranx (enriched JSON with og:images) ─────────────────────────────
+// Gameranx's WordPress RSS strips ALL images — no media:content, no enclosure,
+// no content:encoded. Without enrichment every article falls back to RAWG, which
+// frequently mis-matches headlines (e.g. "LEGO Batman" → "Batman: Arkham Knight").
+// We mirror the Insider Gaming pattern: fetch og:images server-side so the
+// article's real hero image is what the user sees.
 router.get("/feed/gameranx", async (req, res) => {
   try {
     const response = await fetch("https://gameranx.com/feed/", {
@@ -353,9 +358,25 @@ router.get("/feed/gameranx", async (req, res) => {
     }
 
     const xml = await response.text();
-    res.setHeader("Content-Type", "application/xml");
+
+    // Parse article URLs from RSS — must have a slug path, not the channel root
+    const urlMatches = [...xml.matchAll(/<link>\s*(https?:\/\/gameranx\.com\/[a-z0-9][^<\s]{5,})\s*<\/link>/gi)];
+    const articleUrls = [...new Set(urlMatches.map(m => m[1].trim()).filter(u => !u.endsWith("gameranx.com/")))];
+
+    // Fetch og:images in parallel with a 6-second total budget
+    const images = await Promise.all(
+      articleUrls.map(url => fetchOgImage(url).catch(() => null)),
+    );
+
+    const thumbnailMap: Record<string, string> = {};
+    articleUrls.forEach((url, i) => {
+      const img = images[i];
+      if (img) thumbnailMap[url] = img;
+    });
+
+    res.setHeader("Content-Type", "application/json");
     res.setHeader("Cache-Control", "public, max-age=900");
-    res.send(xml);
+    res.json({ xml, thumbnails: thumbnailMap });
   } catch (err) {
     req.log.error({ err }, "Gameranx feed fetch failed");
     res.status(500).json({ error: "Failed to fetch Gameranx feed" });
@@ -613,6 +634,12 @@ router.get("/rawg/image", async (req, res) => {
     // This stops "PlayStation All-Stars Battle Royale" from satisfying a generic
     // "PlayStation news" query — the publisher fallback will pick God of War instead.
     if (publisherFallback && !queryWordsOverride && nonPublisherMatchCount === 0) {
+      return false;
+    }
+    // LEGO franchise gate: when the query mentions a LEGO video game, the candidate
+    // MUST also be a LEGO game. Otherwise "LEGO Batman: Legacy of the Dark Knight"
+    // matches "Batman: Arkham Knight" via batman+knight overlap, which is wrong.
+    if (qw.has("lego") && !gameWords.has("lego")) {
       return false;
     }
     // If every word of the game name appears in the query it's a definite match
