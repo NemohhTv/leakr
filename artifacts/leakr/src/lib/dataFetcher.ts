@@ -143,7 +143,35 @@ const NON_GAMING_TITLE_PATTERNS: RegExp[] = [
   // Speedrun / community events (typically not news)
   /\bgames done quick\b/i,
   /\bspeedrun(ning)?\b.{0,20}\b(record|world record)\b/i,
+  // 4chan-sourced "leaks" — anonymous, unverifiable. User has asked for zero 4chan
+  // content, so any title mention is blocked.
+  /\b4chan\b/i,
+  // /v/ leak references in titles — `/v/` is non-word so we anchor on whitespace/start
+  // instead of \b (which doesn't fire before `/`).
+  /(?:^|\s|\()\/v\/(?:\s|$).{0,20}(leak|leaked|rumou?r)/i,
+  // Physical LEGO set sales / deals (slip past the LEGO video-game allowlist when the
+  // franchise name happens to match, e.g. "LEGO Harry Potter: Hogwarts Castle ... Discounted").
+  // Only block on high-confidence merchandise signals (sale/deal language) to avoid
+  // blocking legitimate LEGO video-game DLC posts.
+  /\blego\b.{0,120}\b(discount(ed)?|on sale|price drop|black friday|cyber monday|prime day|amazon (deal|price)|hogwarts castle|building kit|brick set|minifig(ure)?s?\b)/i,
+  /\b(discount(ed)?|on sale|price drop|black friday|cyber monday|prime day|amazon (deal|price))\b.{0,80}\blego\b/i,
 ];
+
+// 4chan-source detection for Reddit post body text. Many Reddit "leak" posts source
+// their material from 4chan (often /v/) which is anonymous and unverifiable.
+const FOURCHAN_BODY_PATTERNS: RegExp[] = [
+  /\b4chan\b/i,
+  /\b(boards|forums?)\.4chan(nel)?\.org\b/i,
+  // /v/ in body — anchor on whitespace/parens since `/` defeats \b.
+  /(?:^|\s|\(|\[)\/v\/(?:\s|$|\)|\]).{0,40}(leak|rumou?r|insider|source)/i,
+  // "anonymous 4chan poster/user" — require 4chan context explicitly to avoid
+  // matching generic "anonymous source/leak" wording in legitimate reporting.
+  /\banon(ymous)?\s+4chan\s+(poster|user|leak(er)?|source)\b/i,
+];
+
+function bodyMentions4chan(bodyText: string): boolean {
+  return FOURCHAN_BODY_PATTERNS.some(p => p.test(bodyText));
+}
 
 const NON_GAMING_CATEGORIES = new Set([
   "guides", "wordle", "crossword", "puzzle", "hints",
@@ -374,6 +402,12 @@ function parseRedditAtom(
 
     if (isNonGamingItem(title, [])) continue;
 
+    // Body-level 4chan check: posts that source their "leak" from 4chan are unreliable.
+    const earlyContent = entry.querySelector("content")?.textContent || "";
+    const earlyDiv = document.createElement("div");
+    earlyDiv.innerHTML = earlyContent;
+    if (bodyMentions4chan(earlyDiv.textContent || "")) continue;
+
     const articleUrlEarly =
       Array.from(
         (() => {
@@ -525,7 +559,7 @@ function applyCorroboration(items: IntelItem[]): IntelItem[] {
 
 // ── Cache helpers ─────────────────────────────────────────────────────────────
 const CACHE_TTL = 15 * 60 * 1000;
-const CACHE_VERSION = "v18";
+const CACHE_VERSION = "v19";
 
 async function fetchWithCache<T>(
   cacheKey: string,

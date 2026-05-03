@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import { IntelItem } from "@/types";
 import { fetchFeedData } from "@/lib/dataFetcher";
 import { Header, ViewMode, SourceFilter, TierFilter } from "@/components/Header";
@@ -13,9 +13,26 @@ function App() {
   const [error, setError] = useState<string | null>(null);
 
   const [viewMode, setViewMode] = useState<ViewMode>("grid");
-  const [sourceFilter, setSourceFilter] = useState<SourceFilter>("all");
-  const [tierFilter, setTierFilter] = useState<TierFilter>("ALL");
+  const [sourceFilters, setSourceFilters] = useState<Set<SourceFilter>>(() => new Set());
+  const [tierFilters, setTierFilters] = useState<Set<TierFilter>>(() => new Set());
   const [selectedItem, setSelectedItem] = useState<IntelItem | null>(null);
+
+  const toggleSourceFilter = useCallback((v: SourceFilter) => {
+    setSourceFilters(prev => {
+      const next = new Set(prev);
+      if (next.has(v)) next.delete(v); else next.add(v);
+      return next;
+    });
+  }, []);
+  const clearSourceFilters = useCallback(() => setSourceFilters(new Set()), []);
+  const toggleTierFilter = useCallback((v: TierFilter) => {
+    setTierFilters(prev => {
+      const next = new Set(prev);
+      if (next.has(v)) next.delete(v); else next.add(v);
+      return next;
+    });
+  }, []);
+  const clearTierFilters = useCallback(() => setTierFilters(new Set()), []);
 
   useEffect(() => {
     async function loadData() {
@@ -36,21 +53,23 @@ function App() {
 
   const filteredItems = useMemo(() => {
     return items.filter(item => {
-      if (sourceFilter !== "all" && item.source !== sourceFilter) return false;
-      if (tierFilter !== "ALL" && item.tier !== tierFilter) return false;
+      if (sourceFilters.size > 0 && !sourceFilters.has(item.source as SourceFilter)) return false;
+      if (tierFilters.size > 0 && !tierFilters.has(item.tier as TierFilter)) return false;
       return true;
     });
-  }, [items, sourceFilter, tierFilter]);
+  }, [items, sourceFilters, tierFilters]);
 
   return (
     <div className="min-h-[100dvh] bg-background text-foreground flex flex-col font-sans selection:bg-primary/30 selection:text-primary">
-      <Header 
+      <Header
         viewMode={viewMode}
         setViewMode={setViewMode}
-        sourceFilter={sourceFilter}
-        setSourceFilter={setSourceFilter}
-        tierFilter={tierFilter}
-        setTierFilter={setTierFilter}
+        sourceFilters={sourceFilters}
+        toggleSourceFilter={toggleSourceFilter}
+        clearSourceFilters={clearSourceFilters}
+        tierFilters={tierFilters}
+        toggleTierFilter={toggleTierFilter}
+        clearTierFilters={clearTierFilters}
         reportCount={items.length}
       />
 

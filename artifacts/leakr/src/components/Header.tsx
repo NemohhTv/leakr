@@ -3,27 +3,28 @@ import { cn } from "@/lib/utils";
 import { IntelSource } from "@/types";
 
 export type ViewMode = "grid" | "swipe";
-export type SourceFilter = "all" | IntelSource;
-export type TierFilter = "ALL" | "S" | "A" | "B" | "C" | "F";
+export type SourceFilter = IntelSource;
+export type TierFilter = "S" | "A" | "B" | "C" | "F";
 
 interface HeaderProps {
   viewMode: ViewMode;
   setViewMode: (v: ViewMode) => void;
-  sourceFilter: SourceFilter;
-  setSourceFilter: (v: SourceFilter) => void;
-  tierFilter: TierFilter;
-  setTierFilter: (v: TierFilter) => void;
+  sourceFilters: Set<SourceFilter>;
+  toggleSourceFilter: (v: SourceFilter) => void;
+  clearSourceFilters: () => void;
+  tierFilters: Set<TierFilter>;
+  toggleTierFilter: (v: TierFilter) => void;
+  clearTierFilters: () => void;
   reportCount: number;
 }
 
 export function Header({
   viewMode, setViewMode,
-  sourceFilter, setSourceFilter,
-  tierFilter, setTierFilter,
+  sourceFilters, toggleSourceFilter, clearSourceFilters,
+  tierFilters, toggleTierFilter, clearTierFilters,
   reportCount,
 }: HeaderProps) {
   const sources: { label: string; value: SourceFilter }[] = [
-    { label: "ALL", value: "all" },
     { label: "r/GamingLeaksAndRumours", value: "reddit" },
     { label: "r/GamingNews", value: "gamingnews" },
     { label: "IGN", value: "ign" },
@@ -31,7 +32,10 @@ export function Header({
     { label: "VGC", value: "vgc" },
   ];
 
-  const tiers: TierFilter[] = ["ALL", "S", "A", "B", "C", "F"];
+  const tiers: TierFilter[] = ["S", "A", "B", "C", "F"];
+
+  const allSourcesActive = sourceFilters.size === 0;
+  const allTiersActive = tierFilters.size === 0;
 
   return (
     <header className="sticky top-0 z-40 w-full bg-black/80 backdrop-blur-md border-b border-white/5 shadow-sm">
@@ -41,7 +45,7 @@ export function Header({
         <div className="flex items-center justify-between h-16">
           <button
             type="button"
-            onClick={() => { setSourceFilter("all"); setTierFilter("ALL"); }}
+            onClick={() => { clearSourceFilters(); clearTierFilters(); }}
             className="flex items-center gap-3 group focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 rounded"
             aria-label="Reset filters and show all reports"
             data-testid="logo-reset-filters"
@@ -95,41 +99,75 @@ export function Header({
           {/* Sources */}
           <div className="flex items-center gap-1.5 shrink-0 flex-wrap">
             <span className="text-[10px] uppercase tracking-widest text-zinc-600 font-bold mr-1">Source</span>
-            {sources.map(s => (
-              <button
-                key={s.value}
-                onClick={() => setSourceFilter(s.value)}
-                data-testid={`filter-source-${s.value}`}
-                className={cn(
-                  "px-2.5 py-1 text-[10px] uppercase tracking-wider font-bold rounded-full transition-colors border whitespace-nowrap",
-                  sourceFilter === s.value
-                    ? "bg-white text-black border-white"
-                    : "bg-transparent text-zinc-400 border-zinc-800 hover:border-zinc-600",
-                )}
-              >
-                {s.label}
-              </button>
-            ))}
+            <button
+              onClick={clearSourceFilters}
+              data-testid="filter-source-all"
+              aria-pressed={allSourcesActive}
+              className={cn(
+                "px-2.5 py-1 text-[10px] uppercase tracking-wider font-bold rounded-full transition-colors border whitespace-nowrap",
+                allSourcesActive
+                  ? "bg-white text-black border-white"
+                  : "bg-transparent text-zinc-400 border-zinc-800 hover:border-zinc-600",
+              )}
+            >
+              ALL
+            </button>
+            {sources.map(s => {
+              const active = sourceFilters.has(s.value);
+              return (
+                <button
+                  key={s.value}
+                  onClick={() => toggleSourceFilter(s.value)}
+                  data-testid={`filter-source-${s.value}`}
+                  aria-pressed={active}
+                  className={cn(
+                    "px-2.5 py-1 text-[10px] uppercase tracking-wider font-bold rounded-full transition-colors border whitespace-nowrap",
+                    active
+                      ? "bg-white text-black border-white"
+                      : "bg-transparent text-zinc-400 border-zinc-800 hover:border-zinc-600",
+                  )}
+                >
+                  {s.label}
+                </button>
+              );
+            })}
           </div>
 
           {/* Tiers */}
           <div className="flex items-center gap-1.5 shrink-0">
             <span className="text-[10px] uppercase tracking-widest text-zinc-600 font-bold mr-1">Tier</span>
-            {tiers.map(t => (
-              <button
-                key={t}
-                onClick={() => setTierFilter(t)}
-                data-testid={`filter-tier-${t}`}
-                className={cn(
-                  "px-2.5 py-1 text-[10px] uppercase tracking-wider font-bold rounded-full transition-colors border",
-                  tierFilter === t
-                    ? "bg-zinc-800 text-white border-zinc-600"
-                    : "bg-transparent text-zinc-500 border-transparent hover:bg-zinc-900",
-                )}
-              >
-                {t}
-              </button>
-            ))}
+            <button
+              onClick={clearTierFilters}
+              data-testid="filter-tier-ALL"
+              aria-pressed={allTiersActive}
+              className={cn(
+                "px-2.5 py-1 text-[10px] uppercase tracking-wider font-bold rounded-full transition-colors border",
+                allTiersActive
+                  ? "bg-zinc-800 text-white border-zinc-600"
+                  : "bg-transparent text-zinc-500 border-transparent hover:bg-zinc-900",
+              )}
+            >
+              ALL
+            </button>
+            {tiers.map(t => {
+              const active = tierFilters.has(t);
+              return (
+                <button
+                  key={t}
+                  onClick={() => toggleTierFilter(t)}
+                  data-testid={`filter-tier-${t}`}
+                  aria-pressed={active}
+                  className={cn(
+                    "px-2.5 py-1 text-[10px] uppercase tracking-wider font-bold rounded-full transition-colors border",
+                    active
+                      ? "bg-zinc-800 text-white border-zinc-600"
+                      : "bg-transparent text-zinc-500 border-transparent hover:bg-zinc-900",
+                  )}
+                >
+                  {t}
+                </button>
+              );
+            })}
           </div>
 
         </div>
