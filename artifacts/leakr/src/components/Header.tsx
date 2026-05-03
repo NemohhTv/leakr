@@ -15,14 +15,12 @@ interface HeaderProps {
   tierFilters: Set<TierFilter>;
   toggleTierFilter: (v: TierFilter) => void;
   clearTierFilters: () => void;
-  reportCount: number;
 }
 
 export function Header({
   viewMode, setViewMode,
   sourceFilters, toggleSourceFilter, clearSourceFilters,
   tierFilters, toggleTierFilter, clearTierFilters,
-  reportCount,
 }: HeaderProps) {
   const sources: { label: string; value: SourceFilter }[] = [
     { label: "r/GamingLeaksAndRumours", value: "reddit" },
@@ -45,9 +43,9 @@ export function Header({
         <div className="flex items-center justify-between h-16">
           <button
             type="button"
-            onClick={() => { clearSourceFilters(); clearTierFilters(); }}
+            onClick={() => { clearSourceFilters(); clearTierFilters(); setViewMode("grid"); }}
             className="flex items-center gap-3 group focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 rounded"
-            aria-label="Reset filters and show all reports"
+            aria-label="Reset filters, return to grid view, and show all reports"
             data-testid="logo-reset-filters"
           >
             <div className="relative flex items-center justify-center">
@@ -61,13 +59,6 @@ export function Header({
               draggable={false}
             />
           </button>
-
-          <div className="hidden md:flex text-[10px] uppercase tracking-widest font-mono text-zinc-500 border border-zinc-800 bg-zinc-950 px-3 py-1 rounded">
-            <span className="flex items-center gap-2">
-              <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse" />
-              FEED ACTIVE &middot; {reportCount} REPORTS LOADED
-            </span>
-          </div>
 
           <div className="flex items-center gap-1 bg-zinc-900/50 p-1 rounded-lg border border-white/5">
             <button

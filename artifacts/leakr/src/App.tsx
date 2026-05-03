@@ -70,7 +70,6 @@ function App() {
         tierFilters={tierFilters}
         toggleTierFilter={toggleTierFilter}
         clearTierFilters={clearTierFilters}
-        reportCount={items.length}
       />
 
       <main className="flex-grow relative">
@@ -94,7 +93,11 @@ function App() {
       </main>
 
       {viewMode === "grid" && !isLoading && !error && (
-        <footer className="border-t border-white/5 py-8 text-center text-zinc-600 flex flex-col items-center gap-2 bg-black/50">
+        <footer className="border-t border-white/5 py-8 text-center text-zinc-600 flex flex-col items-center gap-3 bg-black/50">
+          <div className="text-[10px] uppercase tracking-widest font-mono text-zinc-500 border border-zinc-800 bg-zinc-950 px-3 py-1 rounded inline-flex items-center gap-2">
+            <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse" />
+            FEED ACTIVE &middot; {items.length} REPORTS LOADED
+          </div>
           <p className="text-xs uppercase tracking-widest font-bold text-zinc-500">
             LEAKR.GG &nbsp;|&nbsp; Latest Gaming News &amp; Leaks
           </p>
