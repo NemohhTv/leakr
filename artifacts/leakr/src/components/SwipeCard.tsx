@@ -14,7 +14,7 @@ interface SwipeCardProps {
 }
 
 export function SwipeCard({ item, onOpenDossier, isActive }: SwipeCardProps) {
-  const { imgSrc, isLoading, isError, ref } = useLazyImage(item.title, item.thumbnail);
+  const { imgSrc, isLoading, isError, ref, onImageError } = useLazyImage(item.title, item.thumbnail);
 
   return (
     <div 
@@ -44,15 +44,28 @@ export function SwipeCard({ item, onOpenDossier, isActive }: SwipeCardProps) {
         {isLoading ? (
           <div className="w-full aspect-video rounded-lg overflow-hidden border border-white/10 shimmer" />
         ) : isError || !imgSrc ? (
-          <div className="w-full aspect-video rounded-lg border border-white/10 bg-zinc-900/50 flex flex-col items-center justify-center text-muted-foreground p-6 text-center">
-             <div className="text-xl font-bold uppercase tracking-widest mb-2 opacity-50">Signal Lost</div>
-             <p className="text-sm opacity-70">Visual transmission could not be intercepted.</p>
+          <div className="relative w-full aspect-video rounded-lg border border-white/10 overflow-hidden">
+            <div className="absolute inset-0 bg-gradient-to-br from-zinc-900 via-zinc-800/60 to-black" />
+            <div
+              className="absolute inset-0 opacity-[0.05]"
+              style={{
+                backgroundImage:
+                  "linear-gradient(rgba(255,255,255,0.6) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.6) 1px, transparent 1px)",
+                backgroundSize: "32px 32px",
+              }}
+            />
+            <div className="absolute inset-0 flex flex-col items-center justify-center text-muted-foreground p-6 text-center">
+              <div className="text-xs font-bold uppercase tracking-[0.3em] mb-1 opacity-40">Signal Lost</div>
+              <p className="text-[11px] opacity-50">Visual transmission unavailable.</p>
+            </div>
+            <div className="absolute bottom-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-primary/50 to-transparent" />
           </div>
         ) : (
           <div className="relative shadow-2xl shadow-black/80 rounded-lg overflow-hidden border border-white/10">
             <img 
               src={imgSrc} 
               alt={item.title} 
+              onError={onImageError}
               className="max-w-full max-h-[50vh] object-contain"
               loading="lazy"
             />

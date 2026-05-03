@@ -25,12 +25,20 @@ function isSkippableThumbnailDomain(url: string): boolean {
   return SKIP_THUMBNAIL_DOMAINS.some(d => url.includes(d));
 }
 
-// Extract YouTube video ID from common URL formats
+// Extract YouTube video ID from common URL formats (handles all watch/live/embed/shorts paths,
+// youtu.be short links, m.youtube.com mobile, and ?v=ID query-string variants).
 function extractYouTubeVideoId(url: string): string | null {
-  const m = url.match(
-    /(?:youtu\.be\/|youtube\.com\/(?:watch\?v=|live\/|embed\/|shorts\/))([A-Za-z0-9_-]{11})/,
+  // Standard path forms
+  const pathMatch = url.match(
+    /(?:youtu\.be\/|(?:m\.|www\.)?youtube\.com\/(?:watch\?[^"'\s]*v=|live\/|embed\/|shorts\/|v\/))([A-Za-z0-9_-]{11})/,
   );
-  return m?.[1] ?? null;
+  if (pathMatch?.[1]) return pathMatch[1];
+  // Bare ?v= anywhere in a youtube.com URL
+  if (/(?:^|\/\/)(?:m\.|www\.)?youtube\.com\b/.test(url)) {
+    const vMatch = url.match(/[?&]v=([A-Za-z0-9_-]{11})/);
+    if (vMatch?.[1]) return vMatch[1];
+  }
+  return null;
 }
 
 // Parse Reddit Atom XML server-side: returns a map of redditThreadUrl → best source URL for thumbnail
@@ -46,8 +54,17 @@ function extractRedditExternalLinks(atomXml: string): Map<string, string> {
     if (!contentEncoded) continue;
 
     const contentHtml = unescapeHtmlEntities(contentEncoded);
+    const allHrefs = [...contentHtml.matchAll(/href="(https?:\/\/[^"]+)"/g)].map(m => m[1]);
 
-    // 1. Link post: dedicated [link] anchor pointing to the source article
+    // 1. STRONG priority: any YouTube video link anywhere in the post — gives us a guaranteed
+    //    high-quality thumbnail directly from img.youtube.com (no og:image fetch needed).
+    const youtubeUrl = allHrefs.find(h => extractYouTubeVideoId(h) !== null);
+    if (youtubeUrl) {
+      map.set(threadUrl, youtubeUrl);
+      continue;
+    }
+
+    // 2. Link post: dedicated [link] anchor pointing to the source article
     const linkAnchorMatch = contentHtml.match(
       /href="(https?:\/\/(?!(?:www\.)?reddit\.com|(?:\w+\.)?redd\.it)[^"]+)"[^>]*>\[link\]/,
     );
@@ -56,8 +73,7 @@ function extractRedditExternalLinks(atomXml: string): Map<string, string> {
       continue;
     }
 
-    // 2. Self-post: scan body for first useful external link (YouTube, news articles, etc.)
-    const allHrefs = [...contentHtml.matchAll(/href="(https?:\/\/[^"]+)"/g)].map(m => m[1]);
+    // 3. Self-post: first useful external link (news article, etc.)
     const firstUseful = allHrefs.find(h => {
       if (h.includes("reddit.com") || h.includes("redd.it")) return false;
       if (isSkippableThumbnailDomain(h)) return false;
@@ -312,8 +328,14 @@ router.get("/rawg/image", async (req, res) => {
     return;
   }
 
+  // Reddit-style "[Studio Name, developers of X]: real headline" posts —
+  // the game name is in the headline AFTER the bracket. Drop the bracketed prefix entirely.
+  // REQUIRE the trailing colon — that's the signal the bracket is attribution, not the game
+  // title itself (e.g. "[The Witcher 4] new trailer" must NOT be stripped).
+  const debracketed = rawQuery.replace(/^\s*\[[^\]]{1,200}\]\s*:\s*/, "");
+
   // Aggressive scrub to isolate game name
-  const scrubbed = rawQuery
+  const scrubbed = debracketed
     // Remove developer-attribution phrases common in Reddit bracket-style posts
     .replace(/\b(developer|studio|studios|creators?|publisher|publishers?|team|subsidiary)\s+(of|behind|for|from)\s+(the\s+)?(famous|popular|renowned|legendary|beloved|iconic|classic)?\s*/gi, "")
     .replace(/,?\s*developers?\s+of\s+(the\s+)?(famous|popular|renowned|legendary|beloved|iconic|classic)?\s*/gi, " ")
