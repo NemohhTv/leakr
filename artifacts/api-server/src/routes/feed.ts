@@ -489,18 +489,22 @@ router.get("/rawg/image", async (req, res) => {
     // Publisher / platform fallback: if no specific game matched but the title mentions
     // a publisher/platform, search RAWG for a representative flagship game.
     if (!bestResult && publisherFallback) {
-      // Use search_exact + relevance check so we get the actual flagship title,
-      // not whatever happens to be most-added with a fuzzy match.
+      // NOTE: search_exact=true returns 0 results for many flagship titles whose canonical
+      // RAWG name contains roman numerals/hyphens/apostrophes (e.g. "Grand Theft Auto VI",
+      // "Counter-Strike 2"). Use fuzzy search and rely on the strict word-overlap filter
+      // below + the highest ratings_count to land on the actual flagship.
       const fbWords = new Set(
-        normalizeWord(publisherFallback).split(/\s+/).filter(w => w.length > 2),
+        normalizeWord(publisherFallback).replace(/[^a-z0-9\s]/g, " ").split(/\s+/).filter(w => w.length > 2),
       );
       const fbUrl = new URL("https://api.rawg.io/api/games");
       fbUrl.searchParams.set("key", apiKey);
       fbUrl.searchParams.set("search", publisherFallback);
-      fbUrl.searchParams.set("search_exact", "true");
-      fbUrl.searchParams.set("page_size", "10");
-      fbUrl.searchParams.set("exclude_additions", "true");
-      fbUrl.searchParams.set("ordering", "-added");
+      fbUrl.searchParams.set("page_size", "20");
+      // Do NOT set exclude_additions=true — RAWG mis-classifies "Counter-Strike 2" as an
+      // addition and drops it from results. Do NOT set ordering=-added — that buries newer
+      // flagships (GTA VI, CS2) under their older, more-played predecessors. Use RAWG's
+      // default relevance score, which puts the canonical-name match at the top.
+      req.log.info({ rawQuery, publisherFallback, fbWords: [...fbWords] }, "RAWG publisher fallback");
       const fbResp = await fetch(fbUrl.toString(), {
         headers: { "User-Agent": "Leakr/1.0" },
         signal: AbortSignal.timeout(6000),
@@ -519,8 +523,21 @@ router.get("/rawg/image", async (req, res) => {
           return [...fbWords].every(w => nameWords.has(w));
         });
         if (fbCandidates.length > 0) {
-          // Prefer the most-rated match
-          const fbBest = fbCandidates.reduce((a, b) =>
+          // Prefer an EXACT name match over the most-rated, so a fallback for
+          // "grand theft auto vi" returns GTA VI specifically — not GTA V just because
+          // it has 1000x more ratings.
+          const normalizedFallback = normalizeWord(publisherFallback)
+            .replace(/[^a-z0-9\s]/g, " ")
+            .replace(/\s+/g, " ")
+            .trim();
+          const exactMatch = fbCandidates.find(r => {
+            const normalizedName = normalizeWord(r.name!)
+              .replace(/[^a-z0-9\s]/g, " ")
+              .replace(/\s+/g, " ")
+              .trim();
+            return normalizedName === normalizedFallback;
+          });
+          const fbBest = exactMatch ?? fbCandidates.reduce((a, b) =>
             (b.ratings_count ?? 0) > (a.ratings_count ?? 0) ? b : a,
           );
           bestResult = {
