@@ -1,0 +1,8 @@
+uploads = []
+generated = []
+
+[[outputs]]
+id = "TieK2IWqibVVBFSH4BSRY"
+uri = "file://exports/leakr_chat_transcript.txt"
+type = "text"
+title = "Leakr Chat Transcript"
