@@ -10,7 +10,7 @@ import { useEffect, useState, useRef } from 'react';
 // Negative results (no match found) are cached too with a shorter TTL so we
 // don't keep retrying the same hopeless query on every reload, but we do
 // re-attempt eventually in case RAWG's catalogue grows.
-const CACHE_KEY = "leakr_rawg_image_cache_v4";
+const CACHE_KEY = "leakr_rawg_image_cache_v5";
 const POSITIVE_TTL_MS = 7 * 24 * 60 * 60 * 1000;   // 7 days
 const NEGATIVE_TTL_MS = 6 * 60 * 60 * 1000;        // 6 hours
 
@@ -81,6 +81,13 @@ const GAME_TITLE_SIGNALS = [
   /\b(final fantasy|metal gear|resident evil|street fighter|mortal kombat|tekken)\b/i,
   /\b(battlefield|overwatch|diablo|world of warcraft|league of legends|valorant|apex)\b/i,
   /\b(dark souls|hollow knight|sekiro|bloodborne|doom|quake|unreal)\b/i,
+  // Valve franchises (Team Fortress, Counter-Strike, Half-Life, Portal, Dota, L4D)
+  /\b(team fortress|counter[\s-]?strike|half[\s-]?life|portal\s*\d|dota|left\s*4\s*dead)\b/i,
+  // Publishers / developers / platforms — any mention of a major gaming company strongly
+  // implies the article is about a game. The server-side resolver will use its publisher
+  // fallback to map these to a flagship title if no specific game is identified.
+  /\b(valve|ubisoft|rockstar|bethesda|blizzard|activision|electronic arts|\bea\b|square enix|capcom|konami|sega|bandai|namco|epic games|take[\s-]?two|2k games|cd projekt|fromsoftware|naughty dog|insomniac|guerrilla|hideo kojima|kojima)\b/i,
+  /\b(nintendo|sony interactive|playstation studios|xbox game studios|microsoft gaming)\b/i,
   // Generic game signals
   /\b(dlc|expansion|update|patch|season pass|battle pass|early access|game pass|gamepass)\b/i,
   /\b(ps5|xbox|nintendo|playstation|steam deck)\b.*\b(game|title|exclusive|release|launch)\b/i,
