@@ -1,12 +1,16 @@
+export type IntelSource = "reddit" | "gamingnews" | "ign" | "insider" | "vgc";
+
 export interface IntelItem {
-  id: string;          // hash of title+source
+  id: string;
   title: string;
-  source: "reddit" | "ign" | "insider";
+  source: IntelSource;
   url: string;
-  thumbnail: string | null;  // resolved image URL (see image engine below)
+  thumbnail: string | null;
   publishedAt: Date;
-  score: number;       // reddit upvotes, or 0 for RSS
+  score: number;
   tier: "S" | "A" | "B" | "C" | "F";
-  plausibility: number; // 1-100
+  plausibility: number;
   description: string;
+  corroborated: boolean;
+  signals: string[];
 }

@@ -1,8 +1,9 @@
 import { LayoutGrid, Maximize2, Radio } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { IntelSource } from "@/types";
 
 export type ViewMode = "grid" | "swipe";
-export type SourceFilter = "all" | "reddit" | "ign" | "insider";
+export type SourceFilter = "all" | IntelSource;
 export type TierFilter = "ALL" | "S" | "A" | "B" | "C" | "F";
 
 interface HeaderProps {
@@ -15,17 +16,19 @@ interface HeaderProps {
   reportCount: number;
 }
 
-export function Header({ 
-  viewMode, setViewMode, 
-  sourceFilter, setSourceFilter, 
+export function Header({
+  viewMode, setViewMode,
+  sourceFilter, setSourceFilter,
   tierFilter, setTierFilter,
-  reportCount
+  reportCount,
 }: HeaderProps) {
-  const sources: {label: string, value: SourceFilter}[] = [
+  const sources: { label: string; value: SourceFilter }[] = [
     { label: "ALL", value: "all" },
     { label: "REDDIT", value: "reddit" },
+    { label: "GAMING NEWS", value: "gamingnews" },
     { label: "IGN", value: "ign" },
-    { label: "INSIDER", value: "insider" }
+    { label: "INSIDER", value: "insider" },
+    { label: "VGC", value: "vgc" },
   ];
 
   const tiers: TierFilter[] = ["ALL", "S", "A", "B", "C", "F"];
@@ -33,7 +36,7 @@ export function Header({
   return (
     <header className="sticky top-0 z-40 w-full bg-black/80 backdrop-blur-md border-b border-white/5 shadow-sm">
       <div className="max-w-[1600px] mx-auto px-4 md:px-6">
-        
+
         {/* Top Row */}
         <div className="flex items-center justify-between h-16">
           <div className="flex items-center gap-3">
@@ -58,7 +61,7 @@ export function Header({
               onClick={() => setViewMode("grid")}
               className={cn(
                 "p-2 rounded transition-colors",
-                viewMode === "grid" ? "bg-zinc-800 text-white" : "text-zinc-500 hover:text-white"
+                viewMode === "grid" ? "bg-zinc-800 text-white" : "text-zinc-500 hover:text-white",
               )}
               data-testid="view-toggle-grid"
             >
@@ -68,7 +71,7 @@ export function Header({
               onClick={() => setViewMode("swipe")}
               className={cn(
                 "p-2 rounded transition-colors",
-                viewMode === "swipe" ? "bg-zinc-800 text-white" : "text-zinc-500 hover:text-white"
+                viewMode === "swipe" ? "bg-zinc-800 text-white" : "text-zinc-500 hover:text-white",
               )}
               data-testid="view-toggle-swipe"
             >
@@ -77,22 +80,22 @@ export function Header({
           </div>
         </div>
 
-        {/* Bottom Row (Filters) */}
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 py-3 border-t border-white/5 overflow-x-auto hide-scrollbar">
-          
+        {/* Filter Row */}
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 py-3 border-t border-white/5 overflow-x-auto">
+
           {/* Sources */}
-          <div className="flex items-center gap-2 shrink-0">
-            <span className="text-[10px] uppercase tracking-widest text-zinc-600 font-bold mr-2">Source</span>
+          <div className="flex items-center gap-1.5 shrink-0 flex-wrap">
+            <span className="text-[10px] uppercase tracking-widest text-zinc-600 font-bold mr-1">Source</span>
             {sources.map(s => (
               <button
                 key={s.value}
                 onClick={() => setSourceFilter(s.value)}
                 data-testid={`filter-source-${s.value}`}
                 className={cn(
-                  "px-3 py-1 text-[10px] uppercase tracking-wider font-bold rounded-full transition-colors border",
-                  sourceFilter === s.value 
-                    ? "bg-white text-black border-white" 
-                    : "bg-transparent text-zinc-400 border-zinc-800 hover:border-zinc-600"
+                  "px-2.5 py-1 text-[10px] uppercase tracking-wider font-bold rounded-full transition-colors border whitespace-nowrap",
+                  sourceFilter === s.value
+                    ? "bg-white text-black border-white"
+                    : "bg-transparent text-zinc-400 border-zinc-800 hover:border-zinc-600",
                 )}
               >
                 {s.label}
@@ -101,18 +104,18 @@ export function Header({
           </div>
 
           {/* Tiers */}
-          <div className="flex items-center gap-2 shrink-0">
-            <span className="text-[10px] uppercase tracking-widest text-zinc-600 font-bold mr-2">Tier</span>
+          <div className="flex items-center gap-1.5 shrink-0">
+            <span className="text-[10px] uppercase tracking-widest text-zinc-600 font-bold mr-1">Tier</span>
             {tiers.map(t => (
               <button
                 key={t}
                 onClick={() => setTierFilter(t)}
                 data-testid={`filter-tier-${t}`}
                 className={cn(
-                  "px-3 py-1 text-[10px] uppercase tracking-wider font-bold rounded-full transition-colors border",
-                  tierFilter === t 
-                    ? "bg-zinc-800 text-white border-zinc-600" 
-                    : "bg-transparent text-zinc-500 border-transparent hover:bg-zinc-900"
+                  "px-2.5 py-1 text-[10px] uppercase tracking-wider font-bold rounded-full transition-colors border",
+                  tierFilter === t
+                    ? "bg-zinc-800 text-white border-zinc-600"
+                    : "bg-transparent text-zinc-500 border-transparent hover:bg-zinc-900",
                 )}
               >
                 {t}

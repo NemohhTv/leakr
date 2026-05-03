@@ -2,11 +2,10 @@ import { Router } from "express";
 
 const router = Router();
 
-// Reddit proxy - parses the RSS feed to avoid API 403 issues
+// ── Reddit: r/GamingLeaksAndRumours ──────────────────────────────────────────
 router.get("/feed/reddit", async (req, res) => {
   try {
     const limit = Math.min(Number(req.query["limit"]) || 25, 50);
-    // Use RSS feed which is more permissive than the JSON API
     const response = await fetch(
       `https://www.reddit.com/r/GamingLeaksAndRumours/top.rss?limit=${limit}&t=day`,
       {
@@ -34,19 +33,47 @@ router.get("/feed/reddit", async (req, res) => {
   }
 });
 
-// RSS feed proxy - IGN Gaming
-router.get("/feed/ign", async (req, res) => {
+// ── Reddit: r/gamingnews ─────────────────────────────────────────────────────
+router.get("/feed/gamingnews", async (req, res) => {
   try {
+    const limit = Math.min(Number(req.query["limit"]) || 25, 50);
     const response = await fetch(
-      "https://feeds.ign.com/ign/games-all",
+      `https://www.reddit.com/r/gamingnews/top.rss?limit=${limit}&t=day`,
       {
         headers: {
-          "User-Agent": "Leakr/1.0 News Aggregator",
-          Accept: "application/rss+xml, application/xml, text/xml",
+          "User-Agent": "Mozilla/5.0 (compatible; Leakr/1.0; +https://leakr.gg)",
+          Accept: "application/rss+xml, application/xml, text/xml, */*",
         },
-        signal: AbortSignal.timeout(8000),
+        signal: AbortSignal.timeout(10000),
       },
     );
+
+    if (!response.ok) {
+      req.log.error({ status: response.status }, "r/gamingnews RSS fetch failed");
+      res.status(response.status).json({ error: "Failed to fetch gamingnews feed" });
+      return;
+    }
+
+    const xml = await response.text();
+    res.setHeader("Content-Type", "application/xml");
+    res.setHeader("Cache-Control", "public, max-age=900");
+    res.send(xml);
+  } catch (err) {
+    req.log.error({ err }, "r/gamingnews feed fetch failed");
+    res.status(500).json({ error: "Failed to fetch gamingnews feed" });
+  }
+});
+
+// ── RSS: IGN Gaming ───────────────────────────────────────────────────────────
+router.get("/feed/ign", async (req, res) => {
+  try {
+    const response = await fetch("https://feeds.ign.com/ign/games-all", {
+      headers: {
+        "User-Agent": "Leakr/1.0 News Aggregator",
+        Accept: "application/rss+xml, application/xml, text/xml",
+      },
+      signal: AbortSignal.timeout(8000),
+    });
 
     if (!response.ok) {
       res.status(response.status).json({ error: "Failed to fetch IGN feed" });
@@ -63,19 +90,16 @@ router.get("/feed/ign", async (req, res) => {
   }
 });
 
-// RSS feed proxy - Insider Gaming
+// ── RSS: Insider Gaming ───────────────────────────────────────────────────────
 router.get("/feed/insider", async (req, res) => {
   try {
-    const response = await fetch(
-      "https://insider-gaming.com/feed/",
-      {
-        headers: {
-          "User-Agent": "Leakr/1.0 News Aggregator",
-          Accept: "application/rss+xml, application/xml, text/xml",
-        },
-        signal: AbortSignal.timeout(8000),
+    const response = await fetch("https://insider-gaming.com/feed/", {
+      headers: {
+        "User-Agent": "Leakr/1.0 News Aggregator",
+        Accept: "application/rss+xml, application/xml, text/xml",
       },
-    );
+      signal: AbortSignal.timeout(8000),
+    });
 
     if (!response.ok) {
       res.status(response.status).json({ error: "Failed to fetch Insider Gaming feed" });
@@ -92,7 +116,33 @@ router.get("/feed/insider", async (req, res) => {
   }
 });
 
-// RAWG image proxy - keeps the API key server-side
+// ── RSS: Video Games Chronicle (VGC) ─────────────────────────────────────────
+router.get("/feed/vgc", async (req, res) => {
+  try {
+    const response = await fetch("https://www.videogameschronicle.com/feed/", {
+      headers: {
+        "User-Agent": "Leakr/1.0 News Aggregator",
+        Accept: "application/rss+xml, application/xml, text/xml",
+      },
+      signal: AbortSignal.timeout(8000),
+    });
+
+    if (!response.ok) {
+      res.status(response.status).json({ error: "Failed to fetch VGC feed" });
+      return;
+    }
+
+    const xml = await response.text();
+    res.setHeader("Content-Type", "application/xml");
+    res.setHeader("Cache-Control", "public, max-age=900");
+    res.send(xml);
+  } catch (err) {
+    req.log.error({ err }, "VGC feed fetch failed");
+    res.status(500).json({ error: "Failed to fetch VGC feed" });
+  }
+});
+
+// ── RAWG image proxy (keeps API key server-side) ─────────────────────────────
 router.get("/rawg/image", async (req, res) => {
   const rawQuery = req.query["q"];
   if (!rawQuery || typeof rawQuery !== "string") {
@@ -106,53 +156,91 @@ router.get("/rawg/image", async (req, res) => {
     return;
   }
 
-  // Scrub noisy gaming-news words before searching
+  // Aggressive scrub to isolate game name
   const scrubbed = rawQuery
     .replace(
-      /\b(leak(ed)?|rumou?r(ed)?|confirm(ed)?|official|reveal(ed)?|trailer|datamine[d]?|report(ed)?|insider|exclusive|breaking|update|patch|dlc|expansion|season\s*\d+|episode\s*\d+|chapter\s*\d+|part\s*\d+|v\d+(\.\d+)*|\d{4}|jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:tember)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?|monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b/gi,
+      /\b(leak(ed)?|rumou?r(ed)?|confirm(ed)?|official(ly)?|reveal(ed)?|trailer|datamine[d]?|report(ed)?|insider|exclusive|breaking|update|patch|dlc|expansion|season\s*\d+|episode\s*\d+|chapter\s*\d+|part\s*\d+|v\d+(\.\d+)*|\d{4}|jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:tember)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?|monday|tuesday|wednesday|thursday|friday|saturday|sunday|according|sources|says?|allegedly|reportedly|analyst|suggests?|hints?|teases?|upcoming|new|next|latest|sequel|prequel|remaster|remake|reboot|announcement|announced|releases?|launching|launch|arrives?|coming|featured|could|might|would|should|will|won[''']t|isn[''']t|aren[''']t|hasn[''']t|haven[''']t|didn[''']t|doesn[''']t|can[''']t)\b/gi,
       "",
     )
-    .replace(/[^a-z0-9\s]/gi, " ")
+    .replace(/[^a-z0-9\s:]/gi, " ")
     .replace(/\s+/g, " ")
     .trim();
 
-  if (!scrubbed) {
+  if (!scrubbed || scrubbed.length < 2) {
     res.status(400).json({ error: "Query too noisy to resolve" });
     return;
   }
 
   try {
-    const url = new URL("https://api.rawg.io/api/games");
-    url.searchParams.set("key", apiKey);
-    url.searchParams.set("search", scrubbed);
-    url.searchParams.set("page_size", "1");
-    url.searchParams.set("search_exact", "false");
+    // Strategy: search with progressively broader queries; prefer popular, well-rated games
+    const queries = [
+      scrubbed,
+      scrubbed.split(" ").slice(0, 4).join(" "), // First 4 words
+      scrubbed.split(" ").slice(0, 2).join(" "),  // First 2 words
+    ].filter(q => q.trim().length >= 2);
 
-    const response = await fetch(url.toString(), {
-      headers: { "User-Agent": "Leakr/1.0" },
-      signal: AbortSignal.timeout(6000),
-    });
+    let bestResult: { background_image: string; name: string; slug: string; ratings_count?: number } | null = null;
 
-    if (!response.ok) {
-      res.status(response.status).json({ error: "RAWG API error" });
-      return;
+    for (const query of queries) {
+      const url = new URL("https://api.rawg.io/api/games");
+      url.searchParams.set("key", apiKey);
+      url.searchParams.set("search", query);
+      url.searchParams.set("page_size", "5");
+      url.searchParams.set("search_exact", "false");
+      url.searchParams.set("exclude_additions", "true"); // No DLCs / expansions
+      url.searchParams.set("ordering", "-added");        // Most added = most popular
+
+      const response = await fetch(url.toString(), {
+        headers: { "User-Agent": "Leakr/1.0" },
+        signal: AbortSignal.timeout(6000),
+      });
+
+      if (!response.ok) continue;
+
+      const data = (await response.json()) as {
+        results?: Array<{
+          background_image?: string;
+          name?: string;
+          slug?: string;
+          ratings_count?: number;
+          metacritic?: number;
+        }>;
+      };
+
+      // Pick the result with the highest ratings_count that has a real image
+      const candidates = (data.results ?? []).filter(
+        r => r.background_image && !r.background_image.includes("media/screenshots"),
+      );
+
+      if (candidates.length > 0) {
+        // Prefer games with ratings (popular, well-known)
+        const best = candidates.reduce((a, b) =>
+          (b.ratings_count ?? 0) > (a.ratings_count ?? 0) ? b : a,
+        );
+
+        // Only accept if the game has some community traction (avoid obscure/wrong matches)
+        if ((best.ratings_count ?? 0) > 5) {
+          bestResult = {
+            background_image: best.background_image!,
+            name: best.name!,
+            slug: best.slug!,
+            ratings_count: best.ratings_count,
+          };
+          break; // Found a good match, stop trying shorter queries
+        }
+      }
     }
 
-    const data = (await response.json()) as {
-      results?: Array<{ background_image?: string; name?: string; slug?: string }>;
-    };
-
-    const game = data.results?.[0];
-    if (!game || !game.background_image) {
-      res.status(404).json({ error: "No image found" });
+    if (!bestResult) {
+      res.status(404).json({ error: "No suitable image found" });
       return;
     }
 
     res.setHeader("Cache-Control", "public, max-age=3600");
     res.json({
-      image: game.background_image,
-      name: game.name,
-      slug: game.slug,
+      image: bestResult.background_image,
+      name: bestResult.name,
+      slug: bestResult.slug,
     });
   } catch (err) {
     req.log.error({ err }, "RAWG API request failed");
