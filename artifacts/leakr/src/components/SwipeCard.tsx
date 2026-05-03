@@ -34,11 +34,13 @@ export function SwipeCard({ item, onOpenDossier, isActive }: SwipeCardProps) {
       )}
       <div className="absolute inset-0 bg-gradient-to-b from-black/40 via-black/70 to-black" />
 
-      {/* Top-anchored content column — single flex layout, no absolute positioning,
-          so the slide always fits the viewport exactly with no scrollbar. We use
-          justify-start (not justify-center) so there's no awkward empty band at
-          the top of the slide on mobile. */}
-      <div className="relative z-10 h-full w-full flex flex-col items-center justify-start text-center px-5 md:px-8 pt-3 md:pt-6 pb-3 md:pb-6 gap-2 md:gap-4">
+      {/* Centered content column — single flex layout, no absolute positioning,
+          so the slide always fits the viewport exactly with no scrollbar.
+          justify-center balances the slide on tall fullscreen viewports
+          (desktop / web) where top-anchored content would leave a large
+          empty band below. The image cap (max-h-[38vh] mobile / 48vh desktop)
+          keeps the stack within the viewport on shorter screens. */}
+      <div className="relative z-10 h-full w-full flex flex-col items-center justify-center text-center px-5 md:px-8 py-4 md:py-6 gap-2 md:gap-4">
 
         <motion.div
           initial={{ y: -8, opacity: 0 }}

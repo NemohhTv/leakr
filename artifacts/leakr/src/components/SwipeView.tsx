@@ -123,6 +123,32 @@ export function SwipeView({
         ))}
       </motion.div>
 
+      {/* Persistent close (X) button — gives keyboard / mouse users an obvious
+          way to exit swipe mode without relying on gestures. Positioned in
+          the top-right corner with a subtle backdrop so it remains visible
+          over both light (image-heavy) and dark slide regions. */}
+      <button
+        type="button"
+        onClick={onExitSwipe}
+        aria-label="Exit swipe mode"
+        data-testid="swipe-exit-button"
+        className="absolute top-3 right-3 z-40 p-2 rounded-full bg-black/50 hover:bg-black/80 text-zinc-300 hover:text-white border border-white/10 backdrop-blur-sm transition-colors"
+      >
+        <X className="w-4 h-4" />
+      </button>
+
+      {/* Persistent filters button — mirror of the X on the opposite corner so
+          mouse / keyboard users can open the filter drawer without swiping. */}
+      <button
+        type="button"
+        onClick={() => setDrawerOpen(true)}
+        aria-label="Open filters"
+        data-testid="swipe-filters-button"
+        className="absolute top-3 left-3 z-40 p-2 rounded-full bg-black/50 hover:bg-black/80 text-zinc-300 hover:text-white border border-white/10 backdrop-blur-sm transition-colors"
+      >
+        <SlidersHorizontal className="w-4 h-4" />
+      </button>
+
       {/* Edge hints — fade out after 3.5s so the view becomes chrome-free.
           pointer-events-none ensures they never block taps on the slide. */}
       <AnimatePresence>
