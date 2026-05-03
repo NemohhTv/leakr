@@ -18,6 +18,7 @@ async function buildAll() {
     entryPoints: [
       path.resolve(artifactDir, "src/index.ts"),
       path.resolve(artifactDir, "src/app.ts"),
+      path.resolve(artifactDir, "src/app-serverless.ts"),
     ],
     platform: "node",
     bundle: true,
