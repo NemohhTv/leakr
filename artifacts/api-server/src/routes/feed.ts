@@ -90,8 +90,49 @@ router.get("/feed/ign", async (req, res) => {
   }
 });
 
-// ── RSS: Insider Gaming ───────────────────────────────────────────────────────
-router.get("/feed/insider", async (req, res) => {
+// ── og:image cache (server-side, keyed by article URL) ───────────────────────
+const ogImageCache: Map<string, string | null> = new Map();
+const OG_CACHE_TTL = 30 * 60 * 1000; // 30 min
+const ogImageTimestamps: Map<string, number> = new Map();
+
+async function fetchOgImage(articleUrl: string): Promise<string | null> {
+  const now = Date.now();
+  const ts = ogImageTimestamps.get(articleUrl) ?? 0;
+  if (ogImageCache.has(articleUrl) && now - ts < OG_CACHE_TTL) {
+    return ogImageCache.get(articleUrl) ?? null;
+  }
+
+  try {
+    const res = await fetch(articleUrl, {
+      headers: {
+        "User-Agent": "Mozilla/5.0 (compatible; Leakr/1.0; +https://leakr.gg)",
+        Accept: "text/html,application/xhtml+xml",
+      },
+      signal: AbortSignal.timeout(7000),
+    });
+    if (!res.ok) { ogImageCache.set(articleUrl, null); return null; }
+
+    // Read full text — og:image is always in <head>, usually in the first 20KB
+    const html = (await res.text()).slice(0, 25_000);
+
+    // Match both attribute orders: property="og:image" content="..." and vice versa
+    const match =
+      html.match(/<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["']/i) ??
+      html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:image["']/i);
+
+    const image = match?.[1]?.trim() ?? null;
+    ogImageCache.set(articleUrl, image);
+    ogImageTimestamps.set(articleUrl, now);
+    return image;
+  } catch {
+    ogImageCache.set(articleUrl, null);
+    ogImageTimestamps.set(articleUrl, now);
+    return null;
+  }
+}
+
+// ── RSS: Insider Gaming (enriched JSON with og:images) ────────────────────────
+router.get("/feed/insider-enriched", async (req, res) => {
   try {
     const response = await fetch("https://insider-gaming.com/feed/", {
       headers: {
@@ -107,9 +148,26 @@ router.get("/feed/insider", async (req, res) => {
     }
 
     const xml = await response.text();
-    res.setHeader("Content-Type", "application/xml");
+
+    // Parse article URLs from RSS XML — exclude channel homepage links (path must have slug)
+    const urlMatches = [...xml.matchAll(/<link>\s*(https?:\/\/insider-gaming\.com\/[a-z0-9][^<\s]{5,})\s*<\/link>/gi)];
+    const articleUrls = [...new Set(urlMatches.map(m => m[1].trim()).filter(u => !u.endsWith("insider-gaming.com/")))];
+
+    // Fetch og:images in parallel with a 6-second total budget
+    const images = await Promise.all(
+      articleUrls.map(url => fetchOgImage(url).catch(() => null)),
+    );
+
+    // Build url → image map
+    const thumbnailMap: Record<string, string> = {};
+    articleUrls.forEach((url, i) => {
+      const img = images[i];
+      if (img) thumbnailMap[url] = img;
+    });
+
+    res.setHeader("Content-Type", "application/json");
     res.setHeader("Cache-Control", "public, max-age=900");
-    res.send(xml);
+    res.json({ xml, thumbnails: thumbnailMap });
   } catch (err) {
     req.log.error({ err }, "Insider Gaming feed fetch failed");
     res.status(500).json({ error: "Failed to fetch Insider Gaming feed" });
@@ -180,7 +238,9 @@ router.get("/rawg/image", async (req, res) => {
       .filter(w => w.length > 2 && !["the", "and", "for", "with", "from", "that", "this", "are", "was", "has", "its", "not", "but"].includes(w)),
   );
 
-  // Require a game result to share at least one key word with the query (prevents Witcher 3 spam)
+  // Require a game result to share enough key words with the query.
+  // For multi-word queries (2+ key words), need 2 matching words to prevent
+  // "Black Desert Online" matching a search for "Crimson Desert".
   function isRelevant(gameName: string): boolean {
     if (queryWords.size === 0) return false;
     const gameWords = new Set(
@@ -190,10 +250,13 @@ router.get("/rawg/image", async (req, res) => {
         .split(/\s+/)
         .filter(w => w.length > 2),
     );
+    let matchCount = 0;
     for (const w of queryWords) {
-      if (gameWords.has(w)) return true;
+      if (gameWords.has(w)) matchCount++;
     }
-    return false;
+    // Single keyword query: 1 match required; multi-word: need at least 2 matches
+    const required = queryWords.size >= 2 ? 2 : 1;
+    return matchCount >= required;
   }
 
   // Strategy: try full scrubbed query then first 4 words — but never drop below 3 meaningful words

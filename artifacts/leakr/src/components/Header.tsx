@@ -24,10 +24,10 @@ export function Header({
 }: HeaderProps) {
   const sources: { label: string; value: SourceFilter }[] = [
     { label: "ALL", value: "all" },
-    { label: "REDDIT", value: "reddit" },
-    { label: "GAMING NEWS", value: "gamingnews" },
+    { label: "r/GamingLeaksAndRumours", value: "reddit" },
+    { label: "r/GamingNews", value: "gamingnews" },
     { label: "IGN", value: "ign" },
-    { label: "INSIDER", value: "insider" },
+    { label: "InsiderGaming", value: "insider" },
     { label: "VGC", value: "vgc" },
   ];
 

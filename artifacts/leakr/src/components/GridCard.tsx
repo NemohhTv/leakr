@@ -3,6 +3,7 @@ import { TierBadge } from "./TierBadge";
 import { PlausibilityBar } from "./PlausibilityBar";
 import { useLazyImage } from "@/lib/imageResolver";
 import { timeAgo } from "@/lib/utils";
+import { sourceLabel } from "@/lib/sourceLabels";
 import { ExternalLink, ShieldAlert, FileText, ArrowUpRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -46,8 +47,8 @@ export function GridCard({ item, onOpenDossier }: GridCardProps) {
           <TierBadge tier={item.tier} size="sm" />
         </div>
         
-        <div className="absolute top-3 right-3 bg-black/60 backdrop-blur-md px-2 py-1 rounded text-[10px] uppercase font-bold tracking-wider text-muted-foreground border border-white/10">
-          {item.source}
+        <div className="absolute top-3 right-3 bg-black/60 backdrop-blur-md px-2 py-1 rounded text-[10px] font-bold tracking-wider text-muted-foreground border border-white/10">
+          {sourceLabel(item.source)}
         </div>
       </div>
 

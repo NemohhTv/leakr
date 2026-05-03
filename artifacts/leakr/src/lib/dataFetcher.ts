@@ -131,7 +131,12 @@ function extractSourceThumbnail(item: Element, descHtml: string): string | null 
 }
 
 // ── RSS feed parser (IGN, Insider, VGC) ──────────────────────────────────────
-function parseRSSFeed(xmlStr: string, source: IntelSource): IntelItem[] {
+// `serverThumbnails` is an optional URL→image map injected by the server (e.g. Insider og:images)
+function parseRSSFeed(
+  xmlStr: string,
+  source: IntelSource,
+  serverThumbnails: Record<string, string> = {},
+): IntelItem[] {
   const parser = new DOMParser();
   const xml = parser.parseFromString(xmlStr, "application/xml");
   const items = Array.from(xml.querySelectorAll("item"));
@@ -157,7 +162,8 @@ function parseRSSFeed(xmlStr: string, source: IntelSource): IntelItem[] {
 
     const pubDateStr = item.querySelector("pubDate")?.textContent || new Date().toISOString();
 
-    const thumbnail = extractSourceThumbnail(item, descRaw);
+    // Server-injected og:image takes highest priority, then RSS media tags
+    const thumbnail = serverThumbnails[link] ?? extractSourceThumbnail(item, descRaw);
 
     const { tier, plausibility, signals } = analyzeTierAndPlausibility(title, source, description);
 
@@ -277,7 +283,7 @@ function applyCorroboration(items: IntelItem[]): IntelItem[] {
 
 // ── Cache helpers ─────────────────────────────────────────────────────────────
 const CACHE_TTL = 15 * 60 * 1000;
-const CACHE_VERSION = "v5";
+const CACHE_VERSION = "v6";
 
 async function fetchWithCache<T>(
   cacheKey: string,
@@ -343,9 +349,11 @@ export async function fetchFeedData(): Promise<IntelItem[]> {
     {
       key: "leakr_cache_insider",
       fetcher: () =>
-        fetch("/api/feed/insider")
-          .then(r => { if (!r.ok) throw new Error("insider " + r.status); return r.text(); })
-          .then(xml => parseRSSFeed(xml, "insider")),
+        fetch("/api/feed/insider-enriched")
+          .then(r => { if (!r.ok) throw new Error("insider " + r.status); return r.json(); })
+          .then(({ xml, thumbnails }: { xml: string; thumbnails: Record<string, string> }) =>
+            parseRSSFeed(xml, "insider", thumbnails),
+          ),
     },
     {
       key: "leakr_cache_vgc",

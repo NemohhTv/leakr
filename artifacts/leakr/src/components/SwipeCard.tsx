@@ -3,6 +3,7 @@ import { TierBadge } from "./TierBadge";
 import { PlausibilityBar } from "./PlausibilityBar";
 import { useLazyImage } from "@/lib/imageResolver";
 import { timeAgo } from "@/lib/utils";
+import { sourceLabel } from "@/lib/sourceLabels";
 import { ArrowUpRight, Clock } from "lucide-react";
 import { motion } from "framer-motion";
 
@@ -74,8 +75,8 @@ export function SwipeCard({ item, onOpenDossier, isActive }: SwipeCardProps) {
           </h2>
 
           <div className="flex items-center gap-4 text-sm text-muted-foreground font-medium mt-2">
-            <span className="uppercase tracking-wider text-white/70 border border-white/20 bg-white/5 px-2 py-0.5 rounded">
-              {item.source}
+            <span className="tracking-wider text-white/70 border border-white/20 bg-white/5 px-2 py-0.5 rounded text-xs">
+              {sourceLabel(item.source)}
             </span>
             <span className="flex items-center gap-1">
               <Clock className="w-4 h-4" />

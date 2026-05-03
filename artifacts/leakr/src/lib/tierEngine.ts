@@ -20,11 +20,22 @@ const NAMED_SOURCES = [
   "gamesindustry", "the game awards", "summer game fest",
 ];
 
-// High-confidence phrases
+// Confirmed / official events — these are real, not rumors
 const CONFIRMED_PHRASES = [
   "officially confirmed", "officially announced", "officially revealed",
   "confirmed by", "announced by", "revealed by", "live now",
-  "available now", "launches today", "out now",
+  "available now", "launches today", "out now", "now available",
+  "has released", "has launched", "has been released",
+];
+
+// Game news / updates that are factual confirmed events
+const CONFIRMED_NEWS_KEYWORDS = [
+  "update", "patch", "hotfix", "patch notes", "game update",
+  "major update", "huge update", "free update", "title update",
+  "addresses", "adds new", "introduces", "brings new",
+  "dlc released", "expansion released", "now out",
+  "developer response", "developers confirm",
+  "launches", "release date", "announced",
 ];
 
 const STRONG_LEAK_PHRASES = [
@@ -86,16 +97,24 @@ export function analyzeTierAndPlausibility(
 
   // --- TIER DETERMINATION (keyword hierarchy) ---
   let tier: Tier;
-  if (
-    countMatches(t, CONFIRMED_PHRASES) > 0 ||
+
+  const hasConfirmedPhrase = countMatches(t, CONFIRMED_PHRASES) > 0;
+  const hasConfirmedNewsKeyword = countMatches(t, CONFIRMED_NEWS_KEYWORDS) > 0;
+  const isOfficialConfirmed =
+    hasConfirmedPhrase ||
     t.includes("confirmed") ||
     t.includes("official") ||
     t.includes("trailer") ||
     t.includes("reveal") ||
     t.includes("announcement") ||
-    t.includes("launches") ||
-    t.includes("release date")
-  ) {
+    t.includes("release date");
+
+  // Confirmed game updates from credible sources (VGC, Insider, IGN) are S-tier facts
+  const isConfirmedFromCredible =
+    hasConfirmedNewsKeyword &&
+    (source === "vgc" || source === "insider" || source === "ign");
+
+  if (isOfficialConfirmed || isConfirmedFromCredible) {
     tier = "S";
   } else if (countMatches(t, STRONG_LEAK_PHRASES) > 0 || t.includes("leaked") || t.includes("leak")) {
     tier = "A";
@@ -110,7 +129,12 @@ export function analyzeTierAndPlausibility(
   } else if (countMatches(t, SPECULATION_PHRASES) > 0 || t.includes("possible") || t.includes("might") || t.includes("could")) {
     tier = "C";
   } else {
-    tier = "F";
+    // Fall-through: neutral gaming news from a credible outlet → B tier
+    if (source === "vgc" || source === "insider" || source === "ign") {
+      tier = "B";
+    } else {
+      tier = "F";
+    }
   }
 
   // --- PLAUSIBILITY FACTORS ---
@@ -126,50 +150,56 @@ export function analyzeTierAndPlausibility(
     signals.push(`Named source: ${namedMatch}`);
   }
 
-  // 3. Strong leak evidence phrases
+  // 3. Confirmed news bonus (update/patch/release from credible source)
+  if (isConfirmedFromCredible) {
+    score += 20;
+    signals.push("Confirmed gaming news");
+  }
+
+  // 4. Strong leak evidence phrases
   const leakPhraseCount = countMatches(t, STRONG_LEAK_PHRASES);
   if (leakPhraseCount > 0) {
     score += leakPhraseCount * 8;
     signals.push("Hard evidence found");
   }
 
-  // 4. Platform specificity — specific claims are more verifiable
+  // 5. Platform specificity — specific claims are more verifiable
   const platformMatches = PLATFORM_SIGNALS.filter(p => t.includes(p));
   if (platformMatches.length > 0) {
     score += Math.min(platformMatches.length * 4, 12);
     signals.push(`Platform mentioned: ${platformMatches.slice(0, 2).join(", ")}`);
   }
 
-  // 5. Confirmed phrase bonus (beyond tier)
-  if (countMatches(t, CONFIRMED_PHRASES) > 0) {
+  // 6. Confirmed phrase bonus (beyond tier)
+  if (hasConfirmedPhrase) {
     score += 15;
     signals.push("Explicit confirmation language");
   }
 
-  // 6. Rumour / source attribution language
+  // 7. Rumour / source attribution language
   if (countMatches(t, RUMOUR_PHRASES) > 0) {
     score += 6;
     signals.push("Sourced claim");
   }
 
-  // 7. Uncertainty markers — reduces confidence
+  // 8. Uncertainty markers — reduces confidence
   const uncertaintyCount = countMatches(t, UNCERTAINTY_MARKERS);
   if (uncertaintyCount > 0) {
     score -= uncertaintyCount * 6;
     signals.push("Uncertainty language detected");
   }
 
-  // 8. Cross-source corroboration — strongest signal
+  // 9. Cross-source corroboration — strongest signal
   if (corroborated) {
     score += 22;
     signals.push("Corroborated by multiple outlets");
   }
 
-  // 9. VGC / Insider source premium
+  // 10. VGC / Insider source premium
   if (source === "vgc") signals.push("VGC premium source");
   if (source === "insider") signals.push("Insider Gaming source");
 
-  // 10. Clamp to tier ranges (soft — don't override strong signals)
+  // 11. Clamp to tier ranges (soft — don't override strong signals)
   const tierRanges: Record<Tier, [number, number]> = {
     S: [72, 100],
     A: [50, 88],
@@ -179,7 +209,7 @@ export function analyzeTierAndPlausibility(
   };
 
   const [min, max] = tierRanges[tier];
-  // Use a small deterministic jitter based on title length to avoid all same-tier items looking identical
+  // Small deterministic jitter based on title length to avoid all same-tier items looking identical
   const jitter = (title.length % 7) - 3;
   const finalScore = clamp(Math.round(score) + jitter, min, max);
 
