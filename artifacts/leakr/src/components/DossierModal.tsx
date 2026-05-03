@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { IntelItem } from "@/types";
 import { motion, AnimatePresence } from "framer-motion";
 import { X, ExternalLink, ShieldAlert, Zap, Clock, CheckCircle2, AlertTriangle, Link2 } from "lucide-react";
@@ -7,6 +8,23 @@ import { timeAgo } from "@/lib/utils";
 interface DossierModalProps {
   item: IntelItem | null;
   onClose: () => void;
+}
+
+function useEscapeToClose(active: boolean, onClose: () => void) {
+  useEffect(() => {
+    if (!active) return;
+    // Capture-phase listener so we run before SwipeView's window-level Escape
+    // handler. We then stop propagation so the modal closes without also
+    // exiting swipe mode (which would leave the modal stranded over grid).
+    const handler = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      e.stopPropagation();
+      e.stopImmediatePropagation();
+      onClose();
+    };
+    window.addEventListener("keydown", handler, { capture: true });
+    return () => window.removeEventListener("keydown", handler, { capture: true });
+  }, [active, onClose]);
 }
 
 const SOURCE_DISPLAY: Record<string, string> = {
@@ -26,6 +44,8 @@ const TIER_LABEL: Record<string, string> = {
 };
 
 export function DossierModal({ item, onClose }: DossierModalProps) {
+  useEscapeToClose(item !== null, onClose);
+
   if (!item) return null;
 
   const signals = item.signals ?? [];

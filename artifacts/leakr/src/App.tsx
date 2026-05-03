@@ -108,19 +108,23 @@ function App() {
       "bg-background text-foreground flex flex-col font-sans selection:bg-primary/30 selection:text-primary " +
       (isSwipe ? "h-[100dvh] overflow-hidden" : "min-h-[100dvh]")
     }>
-      <Header
-        viewMode={viewMode}
-        setViewMode={setViewMode}
-        sourceFilters={sourceFilters}
-        toggleSourceFilter={toggleSourceFilter}
-        clearSourceFilters={clearSourceFilters}
-        tierFilters={tierFilters}
-        toggleTierFilter={toggleTierFilter}
-        clearTierFilters={clearTierFilters}
-        onRefresh={handleRefresh}
-        isRefreshing={isRefreshing}
-        refreshCooldownSec={refreshCooldownSec}
-      />
+      {/* Header is fully hidden in swipe mode — swipe view is a chrome-free
+          fullscreen experience with gesture controls. */}
+      {!isSwipe && (
+        <Header
+          viewMode={viewMode}
+          setViewMode={setViewMode}
+          sourceFilters={sourceFilters}
+          toggleSourceFilter={toggleSourceFilter}
+          clearSourceFilters={clearSourceFilters}
+          tierFilters={tierFilters}
+          toggleTierFilter={toggleTierFilter}
+          clearTierFilters={clearTierFilters}
+          onRefresh={handleRefresh}
+          isRefreshing={isRefreshing}
+          refreshCooldownSec={refreshCooldownSec}
+        />
+      )}
 
       <main className="flex-grow relative min-h-0">
         {isLoading ? (
@@ -138,7 +142,17 @@ function App() {
         ) : viewMode === "grid" ? (
           <GridView items={filteredItems} onOpenDossier={setSelectedItem} />
         ) : (
-          <SwipeView items={filteredItems} onOpenDossier={setSelectedItem} />
+          <SwipeView
+            items={filteredItems}
+            onOpenDossier={setSelectedItem}
+            onExitSwipe={() => setViewMode("grid")}
+            sourceFilters={sourceFilters}
+            toggleSourceFilter={toggleSourceFilter}
+            clearSourceFilters={clearSourceFilters}
+            tierFilters={tierFilters}
+            toggleTierFilter={toggleTierFilter}
+            clearTierFilters={clearTierFilters}
+          />
         )}
       </main>
 
