@@ -10,7 +10,7 @@ import { useEffect, useState, useRef } from 'react';
 // Negative results (no match found) are cached too with a shorter TTL so we
 // don't keep retrying the same hopeless query on every reload, but we do
 // re-attempt eventually in case RAWG's catalogue grows.
-const CACHE_KEY = "leakr_rawg_image_cache_v1";
+const CACHE_KEY = "leakr_rawg_image_cache_v2";
 const POSITIVE_TTL_MS = 7 * 24 * 60 * 60 * 1000;   // 7 days
 const NEGATIVE_TTL_MS = 6 * 60 * 60 * 1000;        // 6 hours
 
