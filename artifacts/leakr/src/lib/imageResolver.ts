@@ -1,7 +1,76 @@
 import { useEffect, useState, useRef } from 'react';
 
-// Global image cache (in-memory, per session)
+// ─── Persistent RAWG image cache ──────────────────────────────────────────
+// Backed by localStorage so thumbnails survive page reloads. Without this,
+// every refresh re-queries RAWG for the same titles (e.g. publisher-fallback
+// "PlayStation Studios" → "God of War"), which is slow AND visibly flickers
+// the thumbnails. RAWG image URLs are CDN-stable for long periods, so a
+// week-long TTL is comfortable.
+//
+// Negative results (no match found) are cached too with a shorter TTL so we
+// don't keep retrying the same hopeless query on every reload, but we do
+// re-attempt eventually in case RAWG's catalogue grows.
+const CACHE_KEY = "leakr_rawg_image_cache_v1";
+const POSITIVE_TTL_MS = 7 * 24 * 60 * 60 * 1000;   // 7 days
+const NEGATIVE_TTL_MS = 6 * 60 * 60 * 1000;        // 6 hours
+
+interface CacheEntry { url: string | null; ts: number; }
+
 const imageCache: Record<string, string | null> = {};
+
+function loadCacheFromStorage(): void {
+  if (typeof window === "undefined") return;
+  try {
+    const raw = window.localStorage.getItem(CACHE_KEY);
+    if (!raw) return;
+    const parsed = JSON.parse(raw) as Record<string, CacheEntry>;
+    const now = Date.now();
+    for (const [title, entry] of Object.entries(parsed)) {
+      if (!entry || typeof entry.ts !== "number") continue;
+      const ttl = entry.url ? POSITIVE_TTL_MS : NEGATIVE_TTL_MS;
+      if (now - entry.ts > ttl) continue; // expired — skip
+      imageCache[title] = entry.url;
+    }
+  } catch {
+    // Corrupt cache — wipe and start fresh.
+    try { window.localStorage.removeItem(CACHE_KEY); } catch { /* ignore */ }
+  }
+}
+
+let persistTimer: ReturnType<typeof setTimeout> | null = null;
+function schedulePersist(): void {
+  if (typeof window === "undefined") return;
+  if (persistTimer) clearTimeout(persistTimer);
+  // Debounce — many cards resolve in quick succession on first paint, so we
+  // batch the writes into a single localStorage round-trip.
+  persistTimer = setTimeout(() => {
+    persistTimer = null;
+    try {
+      const now = Date.now();
+      // Re-read existing entries so we preserve timestamps for anything that
+      // hadn't changed this session, then overlay the in-memory map.
+      const existing: Record<string, CacheEntry> = {};
+      try {
+        const raw = window.localStorage.getItem(CACHE_KEY);
+        if (raw) Object.assign(existing, JSON.parse(raw));
+      } catch { /* ignore */ }
+      for (const [title, url] of Object.entries(imageCache)) {
+        existing[title] = { url, ts: now };
+      }
+      window.localStorage.setItem(CACHE_KEY, JSON.stringify(existing));
+    } catch {
+      // Quota exceeded or otherwise unwritable — just skip; in-memory cache
+      // still works for the rest of this session.
+    }
+  }, 400);
+}
+
+function setCache(title: string, url: string | null): void {
+  imageCache[title] = url;
+  schedulePersist();
+}
+
+loadCacheFromStorage();
 
 // Titles that very likely refer to a specific game — RAWG makes sense to call
 const GAME_TITLE_SIGNALS = [
@@ -125,15 +194,15 @@ export function useLazyImage(title: string, initialThumbnail: string | null) {
       const data = await res.json();
 
       if (data.image) {
-        imageCache[title] = data.image;
+        setCache(title, data.image);
         setImgSrc(data.image);
         setUsedRawg(true);
       } else {
-        imageCache[title] = null;
+        setCache(title, null);
         setIsError(true);
       }
     } catch {
-      imageCache[title] = null;
+      setCache(title, null);
       setIsError(true);
     } finally {
       setIsLoading(false);
