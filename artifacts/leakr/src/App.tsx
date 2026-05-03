@@ -98,8 +98,16 @@ function App() {
     });
   }, [items, sourceFilters, tierFilters]);
 
+  // In swipe view we lock the page to the viewport height and disable body
+  // scrolling; the SwipeView itself owns the snap-scroll container. In grid
+  // view we let the page scroll normally so the footer is reachable.
+  const isSwipe = viewMode === "swipe";
+
   return (
-    <div className="min-h-[100dvh] bg-background text-foreground flex flex-col font-sans selection:bg-primary/30 selection:text-primary">
+    <div className={
+      "bg-background text-foreground flex flex-col font-sans selection:bg-primary/30 selection:text-primary " +
+      (isSwipe ? "h-[100dvh] overflow-hidden" : "min-h-[100dvh]")
+    }>
       <Header
         viewMode={viewMode}
         setViewMode={setViewMode}
@@ -114,7 +122,7 @@ function App() {
         refreshCooldownSec={refreshCooldownSec}
       />
 
-      <main className="flex-grow relative">
+      <main className="flex-grow relative min-h-0">
         {isLoading ? (
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 text-primary">
             <Loader2 className="w-8 h-8 animate-spin" />

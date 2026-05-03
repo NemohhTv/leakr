@@ -16,7 +16,10 @@ export function SwipeView({ items, onOpenDossier }: SwipeViewProps) {
     if (!container) return;
 
     const handleScroll = () => {
-      const index = Math.round(container.scrollTop / window.innerHeight);
+      // Use the container's own height (not window) so we account for the
+      // sticky header that sits above this scroll container.
+      const slideHeight = container.clientHeight || 1;
+      const index = Math.round(container.scrollTop / slideHeight);
       setActiveIndex(index);
     };
 
@@ -26,16 +29,16 @@ export function SwipeView({ items, onOpenDossier }: SwipeViewProps) {
 
   if (items.length === 0) {
     return (
-      <div className="h-[100dvh] w-full flex items-center justify-center text-muted-foreground uppercase tracking-widest font-bold">
+      <div className="h-full w-full flex items-center justify-center text-muted-foreground uppercase tracking-widest font-bold">
         No intel found.
       </div>
     );
   }
 
   return (
-    <div 
+    <div
       ref={containerRef}
-      className="h-[100dvh] w-full overflow-y-scroll snap-y snap-mandatory bg-black scroll-smooth"
+      className="absolute inset-0 overflow-y-scroll snap-y snap-mandatory bg-black scroll-smooth"
     >
       {items.map((item, index) => (
         <SwipeCard 
