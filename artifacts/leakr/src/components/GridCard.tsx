@@ -13,7 +13,7 @@ interface GridCardProps {
 }
 
 export function GridCard({ item, onOpenDossier }: GridCardProps) {
-  const { imgSrc, isLoading, isError, ref } = useLazyImage(item.title, item.thumbnail);
+  const { imgSrc, isLoading, isError, isFromRawg, ref } = useLazyImage(item.title, item.thumbnail);
 
   return (
     <div 
@@ -50,6 +50,18 @@ export function GridCard({ item, onOpenDossier }: GridCardProps) {
         <div className="absolute top-3 right-3 bg-black/60 backdrop-blur-md px-2 py-1 rounded text-[10px] font-bold tracking-wider text-muted-foreground border border-white/10">
           {sourceLabel(item.source)}
         </div>
+
+        {isFromRawg && (
+          <a
+            href="https://rawg.io"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="absolute bottom-2 right-2 text-[8px] text-zinc-600 hover:text-zinc-400 transition-colors bg-black/40 px-1.5 py-0.5 rounded"
+            onClick={e => e.stopPropagation()}
+          >
+            via RAWG
+          </a>
+        )}
       </div>
 
       {/* Content Area */}

@@ -11,6 +11,23 @@ function hashString(str: string): string {
   return Math.abs(hash).toString(16);
 }
 
+// ── Source domain blocklist (Kotaku, Polygon, PC Gamer) ──────────────────────
+const BLOCKED_SOURCE_DOMAINS = [
+  "kotaku.com",
+  "polygon.com",
+  "pcgamer.com",
+  "pc-gamer.com",
+];
+
+function isBlockedSourceUrl(url: string): boolean {
+  try {
+    const host = new URL(url).hostname.replace(/^www\./, "");
+    return BLOCKED_SOURCE_DOMAINS.some(d => host === d || host.endsWith("." + d));
+  } catch {
+    return false;
+  }
+}
+
 // ── Content guard: filter out non-gaming / guide content ─────────────────────
 const NON_GAMING_TITLE_PATTERNS: RegExp[] = [
   /NYT Connections/i,
@@ -178,6 +195,9 @@ function parseRSSFeed(
     if (isNonGamingItem(title, categories)) continue;
 
     const link = item.querySelector("link")?.textContent?.trim() || "";
+
+    // Block articles from excluded outlets
+    if (isBlockedSourceUrl(link)) continue;
     const descRaw = item.querySelector("description")?.textContent || "";
 
     const tempDiv = document.createElement("div");
@@ -227,6 +247,21 @@ function parseRedditAtom(
     const title = entry.querySelector("title")?.textContent?.trim() || "Unknown Title";
 
     if (isNonGamingItem(title, [])) continue;
+
+    const articleUrlEarly =
+      Array.from(
+        (() => {
+          const td = document.createElement("div");
+          td.innerHTML = entry.querySelector("content")?.textContent || "";
+          return td.querySelectorAll("a[href]");
+        })(),
+      )
+        .find(a => {
+          const href = a.getAttribute("href") || "";
+          return href.startsWith("http") && !href.includes("reddit.com") && !href.includes("redd.it") && a.textContent?.trim() === "[link]";
+        })
+        ?.getAttribute("href") ?? null;
+    if (articleUrlEarly && isBlockedSourceUrl(articleUrlEarly)) continue;
 
     const redditThreadUrl =
       entry.querySelector("link")?.getAttribute("href") ||
@@ -354,7 +389,7 @@ function applyCorroboration(items: IntelItem[]): IntelItem[] {
 
 // ── Cache helpers ─────────────────────────────────────────────────────────────
 const CACHE_TTL = 15 * 60 * 1000;
-const CACHE_VERSION = "v11";
+const CACHE_VERSION = "v12";
 
 async function fetchWithCache<T>(
   cacheKey: string,

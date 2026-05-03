@@ -112,16 +112,32 @@ async function buildRedditEnrichedResponse(
   return { xml, thumbnails };
 }
 
-// ── Reddit: r/GamingLeaksAndRumours (enriched JSON) ──────────────────────────
+// Merge two Atom XML feeds into one by combining <entry> elements, deduplicating by thread URL
+function mergeAtomFeeds(xml1: string, xml2: string): string {
+  const headerEnd = xml1.indexOf("<entry>");
+  const header = headerEnd >= 0 ? xml1.substring(0, headerEnd) : xml1.replace("</feed>", "");
+  const extract = (xml: string) => [...xml.matchAll(/<entry>([\s\S]*?)<\/entry>/g)].map(m => m[0]);
+  const seen = new Set<string>();
+  const all: string[] = [];
+  for (const entry of [...extract(xml1), ...extract(xml2)]) {
+    const url = entry.match(/<link[^>]+href="([^"]+)"/)?.[1];
+    if (url && !seen.has(url)) { seen.add(url); all.push(entry); }
+  }
+  return header + all.join("\n") + "\n</feed>";
+}
+
+// ── Reddit: r/GamingLeaksAndRumours (enriched JSON — hot + new combined) ─────
 router.get("/feed/reddit-enriched", async (req, res) => {
   try {
-    const limit = Math.min(Number(req.query["limit"]) || 25, 50);
-    const data = await buildRedditEnrichedResponse(
-      `https://www.reddit.com/r/GamingLeaksAndRumours/top.rss?limit=${limit}&t=day`,
-    );
+    const [hotData, newData] = await Promise.all([
+      buildRedditEnrichedResponse("https://www.reddit.com/r/GamingLeaksAndRumours/hot.rss?limit=5"),
+      buildRedditEnrichedResponse("https://www.reddit.com/r/GamingLeaksAndRumours/new.rss?limit=25"),
+    ]);
+    const xml = mergeAtomFeeds(hotData.xml, newData.xml);
+    const thumbnails = { ...newData.thumbnails, ...hotData.thumbnails };
     res.setHeader("Content-Type", "application/json");
     res.setHeader("Cache-Control", "public, max-age=900");
-    res.json(data);
+    res.json({ xml, thumbnails });
   } catch (err) {
     req.log.error({ err }, "Reddit enriched feed failed");
     res.status(500).json({ error: "Failed to fetch Reddit enriched feed" });
@@ -296,8 +312,11 @@ router.get("/rawg/image", async (req, res) => {
 
   // Aggressive scrub to isolate game name
   const scrubbed = rawQuery
+    // Remove developer-attribution phrases common in Reddit bracket-style posts
+    .replace(/\b(developer|studio|studios|creators?|publisher|publishers?|team|subsidiary)\s+(of|behind|for|from)\s+(the\s+)?(famous|popular|renowned|legendary|beloved|iconic|classic)?\s*/gi, "")
+    .replace(/,?\s*developers?\s+of\s+(the\s+)?(famous|popular|renowned|legendary|beloved|iconic|classic)?\s*/gi, " ")
     .replace(
-      /\b(leak(ed)?|rumou?r(ed)?|confirm(ed)?|official(ly)?|reveal(ed)?|trailer|datamine[d]?|report(ed)?|insider|exclusive|breaking|update|patch|dlc|expansion|season\s*\d+|episode\s*\d+|chapter\s*\d+|part\s*\d+|v\d+(\.\d+)*|\d{4}|jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:tember)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?|monday|tuesday|wednesday|thursday|friday|saturday|sunday|according|sources|says?|allegedly|reportedly|analyst|suggests?|hints?|teases?|upcoming|new|next|latest|sequel|prequel|remaster|remake|reboot|announcement|announced|releases?|launching|launch|arrives?|coming|featured|could|might|would|should|will|won[''']t|isn[''']t|aren[''']t|hasn[''']t|haven[''']t|didn[''']t|doesn[''']t|can[''']t)\b/gi,
+      /\b(leak(ed)?|rumou?r(ed)?|confirm(ed)?|official(ly)?|reveal(ed)?|trailer|datamine[d]?|report(ed)?|insider|exclusive|breaking|update|patch|dlc|expansion|season\s*\d+|episode\s*\d+|chapter\s*\d+|part\s*\d+|v\d+(\.\d+)*|\d{4}|jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:tember)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?|monday|tuesday|wednesday|thursday|friday|saturday|sunday|according|sources|says?|allegedly|reportedly|analyst|suggests?|hints?|teases?|upcoming|new|next|latest|sequel|prequel|remaster|remake|reboot|announcement|announced|releases?|launching|launch|arrives?|coming|featured|could|might|would|should|will|won[''']t|isn[''']t|aren[''']t|hasn[''']t|haven[''']t|didn[''']t|doesn[''']t|can[''']t|franchise|studios?|publishers?|developers?)\b/gi,
       "",
     )
     .replace(/[^a-z0-9\s:]/gi, " ")
@@ -334,8 +353,10 @@ router.get("/rawg/image", async (req, res) => {
     for (const w of queryWords) {
       if (gameWords.has(w)) matchCount++;
     }
-    // Single keyword query: 1 match required; multi-word: need at least 2 matches
-    const required = queryWords.size >= 2 ? 2 : 1;
+    // If every word of the game name appears in the query it's a definite match
+    if (gameWords.size > 0 && [...gameWords].every(w => queryWords.has(w))) return true;
+    // Short game names (1 word) only need 1 match — handles "[Dev]: game info" style titles
+    const required = (queryWords.size >= 2 && gameWords.size >= 2) ? 2 : 1;
     return matchCount >= required;
   }
 

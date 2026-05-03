@@ -74,15 +74,18 @@ function App() {
         )}
       </main>
 
-      {/* Footer is only fully visible in grid mode or when scrolling past the last item in swipe mode, 
-          but usually we pin it or show it at the bottom of the grid */}
       {viewMode === "grid" && !isLoading && !error && (
         <footer className="border-t border-white/5 py-8 text-center text-zinc-600 flex flex-col items-center gap-2 bg-black/50">
-          <p className="text-xs uppercase tracking-widest font-bold">
-            leakr.gg &middot; All intel is unverified. For entertainment purposes only.
+          <p className="text-xs uppercase tracking-widest font-bold text-zinc-500">
+            LEAKR.GG &nbsp;|&nbsp; Latest Gaming News &amp; Leaks
           </p>
-          <a href="https://rawg.io" target="_blank" rel="noopener noreferrer" className="text-[10px] hover:text-zinc-400 transition-colors">
-            Powered by RAWG
+          <a
+            href="https://replit.com"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-[10px] text-zinc-600 hover:text-zinc-400 transition-colors"
+          >
+            Powered by Replit
           </a>
         </footer>
       )}

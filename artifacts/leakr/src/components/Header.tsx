@@ -1,4 +1,4 @@
-import { LayoutGrid, Maximize2, Radio } from "lucide-react";
+import { LayoutGrid, Maximize2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { IntelSource } from "@/types";
 
@@ -40,13 +40,12 @@ export function Header({
         {/* Top Row */}
         <div className="flex items-center justify-between h-16">
           <div className="flex items-center gap-3">
-            <div className="relative flex items-center justify-center w-8 h-8">
-              <Radio className="w-6 h-6 text-primary animate-pulse" />
-              <div className="absolute w-2 h-2 bg-primary rounded-full" />
-            </div>
-            <h1 className="font-bold text-xl md:text-2xl tracking-[0.2em] text-white">
-              LEAKR
-            </h1>
+            <img
+              src="/leakr-logo.png"
+              alt="LEAKR"
+              className="h-9 w-auto object-contain select-none"
+              draggable={false}
+            />
           </div>
 
           <div className="hidden md:flex text-[10px] uppercase tracking-widest font-mono text-zinc-500 border border-zinc-800 bg-zinc-950 px-3 py-1 rounded">

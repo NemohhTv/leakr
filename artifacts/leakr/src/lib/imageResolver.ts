@@ -43,6 +43,9 @@ const SKIP_RAWG_PATTERNS = [
 function shouldFetchRAWG(title: string): boolean {
   // Hard skip list first
   if (SKIP_RAWG_PATTERNS.some(p => p.test(title))) return false;
+  // Short titles (≤ 4 words) are likely bare game names — always try RAWG
+  const wordCount = title.split(/\s+/).filter(w => w.length > 0).length;
+  if (wordCount <= 4) return true;
   // Check if it seems like a gaming article
   const hasGameSignal = GAME_TITLE_SIGNALS.some(p => p.test(title));
   if (hasGameSignal) return true;
@@ -134,5 +137,7 @@ export function useLazyImage(title: string, initialThumbnail: string | null) {
     }
   };
 
-  return { imgSrc, isLoading, isError, ref };
+  const isFromRawg = !initialThumbnail && !!imgSrc && !isError;
+
+  return { imgSrc, isLoading, isError, isFromRawg, ref };
 }
