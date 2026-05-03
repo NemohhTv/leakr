@@ -44,7 +44,7 @@ export function SwipeCard({ item, onOpenDossier, isActive }: SwipeCardProps) {
         initial={{ scale: 0.95, opacity: 0 }}
         animate={{ scale: isActive ? 1 : 0.95, opacity: isActive ? 1 : 0.5 }}
         transition={{ duration: 0.5, ease: "easeOut" }}
-        className="absolute z-10 left-1/2 -translate-x-1/2 top-[14vh] md:top-1/2 md:-translate-y-[calc(50%+4rem)] w-full max-w-[85vw] md:max-w-[70vw] max-h-[45vh] flex items-center justify-center cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 rounded-lg"
+        className="absolute z-10 left-1/2 -translate-x-1/2 top-[6vh] md:top-[8vh] w-full max-w-[85vw] md:max-w-[60vw] max-h-[50vh] flex items-center justify-center cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 rounded-lg"
       >
         {isLoading ? (
           <div className="w-full aspect-video rounded-lg overflow-hidden border border-white/10 shimmer" />
@@ -71,7 +71,7 @@ export function SwipeCard({ item, onOpenDossier, isActive }: SwipeCardProps) {
               src={imgSrc}
               alt={item.title}
               onError={onImageError}
-              className="max-w-full max-h-[45vh] object-contain"
+              className="max-w-full max-h-[50vh] object-contain"
               loading="lazy"
               draggable={false}
             />

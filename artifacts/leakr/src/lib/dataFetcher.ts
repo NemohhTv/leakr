@@ -568,17 +568,20 @@ async function fetchWithCache<T>(
   cacheKey: string,
   fetcher: () => Promise<T[]>,
   revive: (item: any) => T,
+  force = false,
 ): Promise<T[]> {
   const versioned = `${cacheKey}_${CACHE_VERSION}`;
-  const cached = localStorage.getItem(versioned);
-  if (cached) {
-    try {
-      const parsed = JSON.parse(cached);
-      if (Date.now() - parsed.timestamp < CACHE_TTL) {
-        return parsed.data.map(revive);
+  if (!force) {
+    const cached = localStorage.getItem(versioned);
+    if (cached) {
+      try {
+        const parsed = JSON.parse(cached);
+        if (Date.now() - parsed.timestamp < CACHE_TTL) {
+          return parsed.data.map(revive);
+        }
+      } catch {
+        // stale / corrupt — fall through
       }
-    } catch {
-      // stale / corrupt — fall through
     }
   }
 
@@ -588,6 +591,14 @@ async function fetchWithCache<T>(
     return data;
   } catch (err) {
     console.error(`[leakr] fetch failed for ${cacheKey}:`, err);
+    if (force) {
+      const cached = localStorage.getItem(versioned);
+      if (cached) {
+        try {
+          return JSON.parse(cached).data.map(revive);
+        } catch { /* ignore */ }
+      }
+    }
     return [];
   }
 }
@@ -602,7 +613,7 @@ function reviveItem(item: any): IntelItem {
 }
 
 // ── Main export ───────────────────────────────────────────────────────────────
-export async function fetchFeedData(): Promise<IntelItem[]> {
+export async function fetchFeedData(force = false): Promise<IntelItem[]> {
   const sources: Array<{ key: string; fetcher: () => Promise<IntelItem[]> }> = [
     {
       key: "leakr_cache_reddit",
@@ -648,7 +659,7 @@ export async function fetchFeedData(): Promise<IntelItem[]> {
   ];
 
   const results = await Promise.all(
-    sources.map(({ key, fetcher }) => fetchWithCache(key, fetcher, reviveItem)),
+    sources.map(({ key, fetcher }) => fetchWithCache(key, fetcher, reviveItem, force)),
   );
 
   const allItems = applyCorroboration(results.flat());

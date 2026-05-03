@@ -1,4 +1,4 @@
-import { LayoutGrid, Maximize2, Radio } from "lucide-react";
+import { LayoutGrid, Maximize2, Radio, RefreshCw } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { IntelSource } from "@/types";
 
@@ -15,12 +15,16 @@ interface HeaderProps {
   tierFilters: Set<TierFilter>;
   toggleTierFilter: (v: TierFilter) => void;
   clearTierFilters: () => void;
+  onRefresh: () => void;
+  isRefreshing: boolean;
+  refreshCooldownSec: number;
 }
 
 export function Header({
   viewMode, setViewMode,
   sourceFilters, toggleSourceFilter, clearSourceFilters,
   tierFilters, toggleTierFilter, clearTierFilters,
+  onRefresh, isRefreshing, refreshCooldownSec,
 }: HeaderProps) {
   const sources: { label: string; value: SourceFilter }[] = [
     { label: "r/GamingLeaksAndRumours", value: "reddit" },
@@ -60,6 +64,43 @@ export function Header({
             />
           </button>
 
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={onRefresh}
+              disabled={isRefreshing || refreshCooldownSec > 0}
+              data-testid="refresh-feed"
+              aria-label={
+                isRefreshing
+                  ? "Refreshing feed"
+                  : refreshCooldownSec > 0
+                    ? `Refresh available in ${refreshCooldownSec} seconds`
+                    : "Refresh feed from latest sources"
+              }
+              title={
+                isRefreshing
+                  ? "Refreshing…"
+                  : refreshCooldownSec > 0
+                    ? `Wait ${refreshCooldownSec}s before refreshing again`
+                    : "Pull the latest from all sources"
+              }
+              className={cn(
+                "flex items-center gap-1.5 px-2.5 h-9 rounded-lg border text-[10px] uppercase tracking-widest font-bold font-mono transition-colors",
+                isRefreshing || refreshCooldownSec > 0
+                  ? "border-zinc-800 bg-zinc-900/40 text-zinc-600 cursor-not-allowed"
+                  : "border-zinc-800 bg-zinc-900/50 text-zinc-300 hover:text-white hover:border-zinc-600",
+              )}
+            >
+              <RefreshCw className={cn("w-3.5 h-3.5", isRefreshing && "animate-spin")} />
+              <span className="hidden sm:inline tabular-nums">
+                {isRefreshing
+                  ? "Pulling…"
+                  : refreshCooldownSec > 0
+                    ? `${refreshCooldownSec}s`
+                    : "Refresh"}
+              </span>
+            </button>
+
           <div className="flex items-center gap-1 bg-zinc-900/50 p-1 rounded-lg border border-white/5">
             <button
               onClick={() => setViewMode("grid")}
@@ -81,6 +122,7 @@ export function Header({
             >
               <Maximize2 className="w-4 h-4" />
             </button>
+          </div>
           </div>
         </div>
 

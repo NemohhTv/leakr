@@ -7,6 +7,9 @@ import { SwipeView } from "@/components/SwipeView";
 import { DossierModal } from "@/components/DossierModal";
 import { Loader2 } from "lucide-react";
 
+const REFRESH_COOLDOWN_MS = 60_000;
+const REFRESH_KEY = "leakr_last_manual_refresh";
+
 function App() {
   const [items, setItems] = useState<IntelItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -16,6 +19,42 @@ function App() {
   const [sourceFilters, setSourceFilters] = useState<Set<SourceFilter>>(() => new Set());
   const [tierFilters, setTierFilters] = useState<Set<TierFilter>>(() => new Set());
   const [selectedItem, setSelectedItem] = useState<IntelItem | null>(null);
+
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [refreshCooldownSec, setRefreshCooldownSec] = useState(0);
+
+  // Tick down cooldown every second; reads persisted timestamp so closing the
+  // tab and reopening still respects the rate limit.
+  useEffect(() => {
+    const tick = () => {
+      const last = Number(localStorage.getItem(REFRESH_KEY) ?? 0);
+      const remainingMs = last + REFRESH_COOLDOWN_MS - Date.now();
+      setRefreshCooldownSec(remainingMs > 0 ? Math.ceil(remainingMs / 1000) : 0);
+    };
+    tick();
+    const id = window.setInterval(tick, 1000);
+    return () => window.clearInterval(id);
+  }, []);
+
+  const handleRefresh = useCallback(async () => {
+    const last = Number(localStorage.getItem(REFRESH_KEY) ?? 0);
+    if (Date.now() - last < REFRESH_COOLDOWN_MS) return;
+    if (isRefreshing) return;
+
+    localStorage.setItem(REFRESH_KEY, String(Date.now()));
+    setRefreshCooldownSec(Math.ceil(REFRESH_COOLDOWN_MS / 1000));
+    setIsRefreshing(true);
+    setError(null);
+    try {
+      const data = await fetchFeedData(true);
+      setItems(data);
+    } catch (e) {
+      console.error(e);
+      setError("Failed to refresh intel feeds. Showing previous results.");
+    } finally {
+      setIsRefreshing(false);
+    }
+  }, [isRefreshing]);
 
   const toggleSourceFilter = useCallback((v: SourceFilter) => {
     setSourceFilters(prev => {
@@ -70,6 +109,9 @@ function App() {
         tierFilters={tierFilters}
         toggleTierFilter={toggleTierFilter}
         clearTierFilters={clearTierFilters}
+        onRefresh={handleRefresh}
+        isRefreshing={isRefreshing}
+        refreshCooldownSec={refreshCooldownSec}
       />
 
       <main className="flex-grow relative">
