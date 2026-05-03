@@ -11,56 +11,157 @@ function hashString(str: string): string {
   return Math.abs(hash).toString(16);
 }
 
+// ── Content guard: filter out non-gaming / guide content ─────────────────────
+const NON_GAMING_TITLE_PATTERNS: RegExp[] = [
+  /NYT Connections/i,
+  /Connections Hints/i,
+  /Connections Answers/i,
+  /\bConnections\b.{0,10}#\d+/i,
+  /Wordle (Answer|Hint|Solution)/i,
+  /\bWordle\b.{0,8}#\d+/i,
+  /Crossword (Answer|Hint|Clue)/i,
+  /Daily (Puzzle|Hint|Answer)/i,
+  /Puzzle Answer(s)? for/i,
+  /(Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday)[, ]+May/i,
+  /Hints Today.{0,20}#\d+/i,
+  /Answers for (Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday)/i,
+  /Box Office/i,
+  /Movie Review/i,
+  /TV Show Review/i,
+  /Episode Recap/i,
+  /Season \d+ Episode/i,
+];
+
+const NON_GAMING_CATEGORIES = new Set([
+  "guides", "wordle", "crossword", "puzzle", "hints",
+  "movies", "tv", "film", "streaming", "new york times",
+]);
+
+function isNonGamingItem(title: string, categories: string[]): boolean {
+  if (NON_GAMING_TITLE_PATTERNS.some(p => p.test(title))) return true;
+  const lcCats = categories.map(c => c.toLowerCase());
+  const hasGuides = lcCats.includes("guides");
+  const hasNonGaming = lcCats.some(c => NON_GAMING_CATEGORIES.has(c));
+  // Only filter on category if it's definitively non-gaming (Guides alone isn't enough)
+  if (hasGuides && hasNonGaming) return true;
+  return false;
+}
+
+// ── Image extraction: priority order for RSS items ───────────────────────────
+function extractSourceThumbnail(item: Element, descHtml: string): string | null {
+  // 1. media:content — most reliable, highest quality
+  const mediaContents = item.getElementsByTagNameNS("*", "content");
+  for (const mc of Array.from(mediaContents)) {
+    const url = mc.getAttribute("url");
+    const medium = mc.getAttribute("medium");
+    const type = mc.getAttribute("type") || "";
+    if (url && url.startsWith("http") && (medium === "image" || type.startsWith("image/"))) {
+      return url;
+    }
+  }
+
+  // 2. media:thumbnail — common in news feeds
+  const mediaThumbnails = item.getElementsByTagNameNS("*", "thumbnail");
+  for (const mt of Array.from(mediaThumbnails)) {
+    const url = mt.getAttribute("url");
+    const width = parseInt(mt.getAttribute("width") || "0", 10);
+    // Accept any size — small thumbnails are still better than RAWG guessing
+    if (url && url.startsWith("http") && (width === 0 || width >= 100)) {
+      return url;
+    }
+  }
+
+  // 3. enclosure (e.g. some WordPress feeds)
+  const enclosure = item.querySelector("enclosure");
+  const encUrl = enclosure?.getAttribute("url");
+  const encType = enclosure?.getAttribute("type") || "";
+  if (encUrl && encUrl.startsWith("http") && (encType.startsWith("image/") || encUrl.match(/\.(jpg|jpeg|png|webp|gif)(\?|$)/i))) {
+    return encUrl;
+  }
+
+  // 4. First <img> in content:encoded (IGN uses this)
+  const contentEncoded = item.getElementsByTagNameNS("*", "encoded")[0];
+  if (contentEncoded) {
+    const tempContent = document.createElement("div");
+    tempContent.innerHTML = contentEncoded.textContent || "";
+    const imgs = Array.from(tempContent.querySelectorAll("img[src]"));
+    for (const img of imgs) {
+      const src = img.getAttribute("src") || "";
+      // Skip tiny icons, tracking pixels, site logos
+      const w = parseInt(img.getAttribute("width") || "0", 10);
+      const h = parseInt(img.getAttribute("height") || "0", 10);
+      if (
+        src.startsWith("http") &&
+        !src.includes("icon") &&
+        !src.includes("logo") &&
+        !src.includes("avatar") &&
+        !src.includes("tracking") &&
+        !src.includes("pixel") &&
+        (w === 0 || w >= 200) &&
+        (h === 0 || h >= 100)
+      ) {
+        return src;
+      }
+    }
+  }
+
+  // 5. First <img> in description HTML
+  if (descHtml) {
+    const tempDiv = document.createElement("div");
+    tempDiv.innerHTML = descHtml;
+    const imgs = Array.from(tempDiv.querySelectorAll("img[src]"));
+    for (const img of imgs) {
+      const src = img.getAttribute("src") || "";
+      const w = parseInt(img.getAttribute("width") || "0", 10);
+      const h = parseInt(img.getAttribute("height") || "0", 10);
+      if (
+        src.startsWith("http") &&
+        !src.includes("icon") &&
+        !src.includes("logo") &&
+        !src.includes("avatar") &&
+        (w === 0 || w >= 200) &&
+        (h === 0 || h >= 100)
+      ) {
+        return src;
+      }
+    }
+  }
+
+  return null;
+}
+
+// ── RSS feed parser (IGN, Insider, VGC) ──────────────────────────────────────
 function parseRSSFeed(xmlStr: string, source: IntelSource): IntelItem[] {
   const parser = new DOMParser();
   const xml = parser.parseFromString(xmlStr, "application/xml");
   const items = Array.from(xml.querySelectorAll("item"));
 
-  return items.map(item => {
+  const result: IntelItem[] = [];
+
+  for (const item of items) {
     const title = item.querySelector("title")?.textContent?.trim() || "Unknown Title";
+
+    // Extract all categories for this item
+    const categories = Array.from(item.querySelectorAll("category"))
+      .map(c => c.textContent?.trim() || "");
+
+    // Filter non-gaming content
+    if (isNonGamingItem(title, categories)) continue;
+
     const link = item.querySelector("link")?.textContent?.trim() || "";
     const descRaw = item.querySelector("description")?.textContent || "";
 
     const tempDiv = document.createElement("div");
     tempDiv.innerHTML = descRaw;
-    const description = (tempDiv.textContent || "").substring(0, 300);
+    const description = (tempDiv.textContent || "").substring(0, 300).trim();
 
     const pubDateStr = item.querySelector("pubDate")?.textContent || new Date().toISOString();
 
-    let thumbnail: string | null = null;
-
-    const enclosure = item.querySelector("enclosure");
-    if (enclosure?.getAttribute("type")?.startsWith("image/")) {
-      thumbnail = enclosure.getAttribute("url");
-    }
-
-    if (!thumbnail) {
-      const mediaThumbnail = item.getElementsByTagNameNS("*", "thumbnail")[0];
-      const width = parseInt(mediaThumbnail?.getAttribute("width") || "0", 10);
-      if (mediaThumbnail && (width === 0 || width >= 400)) {
-        thumbnail = mediaThumbnail.getAttribute("url");
-      }
-    }
-
-    if (!thumbnail) {
-      const mediaContent = item.getElementsByTagNameNS("*", "content")[0];
-      if (mediaContent && mediaContent.getAttribute("medium") === "image") {
-        thumbnail = mediaContent.getAttribute("url");
-      }
-    }
-
-    // Pull first real image out of description HTML
-    if (!thumbnail) {
-      const img = tempDiv.querySelector("img[src]");
-      const src = img?.getAttribute("src") || "";
-      if (src.startsWith("http") && !src.includes("icon") && !src.includes("logo") && !src.includes("avatar")) {
-        thumbnail = src;
-      }
-    }
+    const thumbnail = extractSourceThumbnail(item, descRaw);
 
     const { tier, plausibility, signals } = analyzeTierAndPlausibility(title, source, description);
 
-    return {
+    result.push({
       id: hashString(title + source),
       title,
       source,
@@ -73,17 +174,25 @@ function parseRSSFeed(xmlStr: string, source: IntelSource): IntelItem[] {
       description,
       corroborated: false,
       signals,
-    };
-  });
+    });
+  }
+
+  return result;
 }
 
+// ── Reddit Atom parser ────────────────────────────────────────────────────────
 function parseRedditAtom(xmlStr: string, source: IntelSource): IntelItem[] {
   const parser = new DOMParser();
   const xml = parser.parseFromString(xmlStr, "application/xml");
   const entries = Array.from(xml.querySelectorAll("entry"));
 
-  return entries.map(entry => {
+  const result: IntelItem[] = [];
+
+  for (const entry of entries) {
     const title = entry.querySelector("title")?.textContent?.trim() || "Unknown Title";
+
+    if (isNonGamingItem(title, [])) continue;
+
     const link =
       entry.querySelector("link")?.getAttribute("href") ||
       entry.querySelector("link")?.textContent ||
@@ -97,29 +206,22 @@ function parseRedditAtom(xmlStr: string, source: IntelSource): IntelItem[] {
     const tempDiv = document.createElement("div");
     tempDiv.innerHTML = content;
 
+    // For Reddit: only use media:thumbnail (provided by Reddit for image posts).
+    // Do NOT extract images from post HTML — those are user-submitted memes, not game art.
     let thumbnail: string | null = null;
-    const img = tempDiv.querySelector("img[src]");
-    if (img) {
-      const src = img.getAttribute("src") || "";
-      if (
-        src.startsWith("http") &&
-        !src.includes("external-preview") &&
-        !src.includes("icon") &&
-        !src.includes("logo")
-      ) {
-        thumbnail = src;
-      }
-    }
-
     const mediaThumbnail = entry.getElementsByTagNameNS("*", "thumbnail")[0];
-    if (!thumbnail && mediaThumbnail) {
-      thumbnail = mediaThumbnail.getAttribute("url");
+    if (mediaThumbnail) {
+      const url = mediaThumbnail.getAttribute("url");
+      // Reddit provides "self", "default", "nsfw" as placeholder strings — ignore those
+      if (url && url.startsWith("http")) {
+        thumbnail = url;
+      }
     }
 
     const description = (tempDiv.textContent || "").substring(0, 300).trim();
     const { tier, plausibility, signals } = analyzeTierAndPlausibility(title, source, description);
 
-    return {
+    result.push({
       id: hashString(title + source),
       title,
       source,
@@ -132,11 +234,13 @@ function parseRedditAtom(xmlStr: string, source: IntelSource): IntelItem[] {
       description,
       corroborated: false,
       signals,
-    };
-  });
+    });
+  }
+
+  return result;
 }
 
-// Cross-source corroboration: mark items sharing ≥40% word overlap with another source's item
+// ── Cross-source corroboration ────────────────────────────────────────────────
 function applyCorroboration(items: IntelItem[]): IntelItem[] {
   const titleWords = (title: string) =>
     new Set(
@@ -163,27 +267,25 @@ function applyCorroboration(items: IntelItem[]): IntelItem[] {
 
     if (!isCorroborated) return item;
 
-    // Recalculate with corroboration flag for boosted plausibility
     const { tier, plausibility, signals } = analyzeTierAndPlausibility(
-      item.title,
-      item.source,
-      item.description,
-      true,
+      item.title, item.source, item.description, true,
     );
 
     return { ...item, tier, plausibility, signals, corroborated: true };
   });
 }
 
+// ── Cache helpers ─────────────────────────────────────────────────────────────
 const CACHE_TTL = 15 * 60 * 1000;
-const CACHE_VERSION = "v2"; // bump to invalidate stale caches on schema changes
+const CACHE_VERSION = "v5";
 
 async function fetchWithCache<T>(
   cacheKey: string,
   fetcher: () => Promise<T[]>,
   revive: (item: any) => T,
 ): Promise<T[]> {
-  const cached = localStorage.getItem(cacheKey);
+  const versioned = `${cacheKey}_${CACHE_VERSION}`;
+  const cached = localStorage.getItem(versioned);
   if (cached) {
     try {
       const parsed = JSON.parse(cached);
@@ -191,13 +293,13 @@ async function fetchWithCache<T>(
         return parsed.data.map(revive);
       }
     } catch {
-      // stale / corrupt cache — fall through
+      // stale / corrupt — fall through
     }
   }
 
   try {
     const data = await fetcher();
-    localStorage.setItem(cacheKey, JSON.stringify({ timestamp: Date.now(), data }));
+    localStorage.setItem(versioned, JSON.stringify({ timestamp: Date.now(), data }));
     return data;
   } catch (err) {
     console.error(`[leakr] fetch failed for ${cacheKey}:`, err);
@@ -206,41 +308,47 @@ async function fetchWithCache<T>(
 }
 
 function reviveItem(item: any): IntelItem {
-  return { ...item, publishedAt: new Date(item.publishedAt) };
+  return {
+    ...item,
+    publishedAt: new Date(item.publishedAt),
+    corroborated: item.corroborated ?? false,
+    signals: item.signals ?? [],
+  };
 }
 
+// ── Main export ───────────────────────────────────────────────────────────────
 export async function fetchFeedData(): Promise<IntelItem[]> {
   const sources: Array<{ key: string; fetcher: () => Promise<IntelItem[]> }> = [
     {
-      key: `leakr_cache_reddit_${CACHE_VERSION}`,
+      key: "leakr_cache_reddit",
       fetcher: () =>
         fetch("/api/feed/reddit?limit=25")
           .then(r => { if (!r.ok) throw new Error("reddit " + r.status); return r.text(); })
           .then(xml => parseRedditAtom(xml, "reddit")),
     },
     {
-      key: `leakr_cache_gamingnews_${CACHE_VERSION}`,
+      key: "leakr_cache_gamingnews",
       fetcher: () =>
         fetch("/api/feed/gamingnews?limit=25")
           .then(r => { if (!r.ok) throw new Error("gamingnews " + r.status); return r.text(); })
           .then(xml => parseRedditAtom(xml, "gamingnews")),
     },
     {
-      key: `leakr_cache_ign_${CACHE_VERSION}`,
+      key: "leakr_cache_ign",
       fetcher: () =>
         fetch("/api/feed/ign")
           .then(r => { if (!r.ok) throw new Error("ign " + r.status); return r.text(); })
           .then(xml => parseRSSFeed(xml, "ign")),
     },
     {
-      key: `leakr_cache_insider_${CACHE_VERSION}`,
+      key: "leakr_cache_insider",
       fetcher: () =>
         fetch("/api/feed/insider")
           .then(r => { if (!r.ok) throw new Error("insider " + r.status); return r.text(); })
           .then(xml => parseRSSFeed(xml, "insider")),
     },
     {
-      key: `leakr_cache_vgc_${CACHE_VERSION}`,
+      key: "leakr_cache_vgc",
       fetcher: () =>
         fetch("/api/feed/vgc")
           .then(r => { if (!r.ok) throw new Error("vgc " + r.status); return r.text(); })

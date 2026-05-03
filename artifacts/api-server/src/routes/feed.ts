@@ -172,12 +172,36 @@ router.get("/rawg/image", async (req, res) => {
   }
 
   try {
-    // Strategy: search with progressively broader queries; prefer popular, well-rated games
-    const queries = [
-      scrubbed,
-      scrubbed.split(" ").slice(0, 4).join(" "), // First 4 words
-      scrubbed.split(" ").slice(0, 2).join(" "),  // First 2 words
-    ].filter(q => q.trim().length >= 2);
+    // Significant words from the original query for relevance check
+  const queryWords = new Set(
+    scrubbed
+      .toLowerCase()
+      .split(/\s+/)
+      .filter(w => w.length > 2 && !["the", "and", "for", "with", "from", "that", "this", "are", "was", "has", "its", "not", "but"].includes(w)),
+  );
+
+  // Require a game result to share at least one key word with the query (prevents Witcher 3 spam)
+  function isRelevant(gameName: string): boolean {
+    if (queryWords.size === 0) return false;
+    const gameWords = new Set(
+      gameName
+        .toLowerCase()
+        .replace(/[^a-z0-9\s]/g, " ")
+        .split(/\s+/)
+        .filter(w => w.length > 2),
+    );
+    for (const w of queryWords) {
+      if (gameWords.has(w)) return true;
+    }
+    return false;
+  }
+
+  // Strategy: try full scrubbed query then first 4 words — but never drop below 3 meaningful words
+  const words = scrubbed.split(" ").filter(w => w.length > 0);
+  const queries = [
+    scrubbed,
+    words.length > 4 ? words.slice(0, 4).join(" ") : null,
+  ].filter((q): q is string => q !== null && q.trim().length >= 3);
 
     let bestResult: { background_image: string; name: string; slug: string; ratings_count?: number } | null = null;
 
@@ -207,26 +231,30 @@ router.get("/rawg/image", async (req, res) => {
         }>;
       };
 
-      // Pick the result with the highest ratings_count that has a real image
+      // Only keep candidates with a real image AND name relevance to the query
       const candidates = (data.results ?? []).filter(
-        r => r.background_image && !r.background_image.includes("media/screenshots"),
+        r =>
+          r.background_image &&
+          !r.background_image.includes("media/screenshots") &&
+          r.name &&
+          isRelevant(r.name),
       );
 
       if (candidates.length > 0) {
-        // Prefer games with ratings (popular, well-known)
+        // Prefer games with community traction
         const best = candidates.reduce((a, b) =>
           (b.ratings_count ?? 0) > (a.ratings_count ?? 0) ? b : a,
         );
 
-        // Only accept if the game has some community traction (avoid obscure/wrong matches)
-        if ((best.ratings_count ?? 0) > 5) {
+        // Require meaningful community traction to avoid obscure / mismatched results
+        if ((best.ratings_count ?? 0) > 50) {
           bestResult = {
             background_image: best.background_image!,
             name: best.name!,
             slug: best.slug!,
             ratings_count: best.ratings_count,
           };
-          break; // Found a good match, stop trying shorter queries
+          break;
         }
       }
     }
