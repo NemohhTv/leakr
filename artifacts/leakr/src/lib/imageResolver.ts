@@ -10,7 +10,7 @@ import { useEffect, useState, useRef } from 'react';
 // Negative results (no match found) are cached too with a shorter TTL so we
 // don't keep retrying the same hopeless query on every reload, but we do
 // re-attempt eventually in case RAWG's catalogue grows.
-const CACHE_KEY = "leakr_rawg_image_cache_v5";
+const CACHE_KEY = "leakr_rawg_image_cache_v6";
 const POSITIVE_TTL_MS = 7 * 24 * 60 * 60 * 1000;   // 7 days
 const NEGATIVE_TTL_MS = 6 * 60 * 60 * 1000;        // 6 hours
 
@@ -72,30 +72,10 @@ function setCache(title: string, url: string | null): void {
 
 loadCacheFromStorage();
 
-// Titles that very likely refer to a specific game — RAWG makes sense to call
-const GAME_TITLE_SIGNALS = [
-  // Sequel/series number patterns
-  /\b(gta|grand theft auto)\b/i,
-  /\b(call of duty|cod|halo|fortnite|minecraft|zelda|pokemon|mario|fifa|assassin[''']?s creed)\b/i,
-  /\b(elder scrolls|fallout|cyberpunk|starfield|red dead|elden ring|god of war|last of us)\b/i,
-  /\b(final fantasy|metal gear|resident evil|street fighter|mortal kombat|tekken)\b/i,
-  /\b(battlefield|overwatch|diablo|world of warcraft|league of legends|valorant|apex)\b/i,
-  /\b(dark souls|hollow knight|sekiro|bloodborne|doom|quake|unreal)\b/i,
-  // Valve franchises (Team Fortress, Counter-Strike, Half-Life, Portal, Dota, L4D)
-  /\b(team fortress|counter[\s-]?strike|half[\s-]?life|portal\s*\d|dota|left\s*4\s*dead)\b/i,
-  // Publishers / developers / platforms — any mention of a major gaming company strongly
-  // implies the article is about a game. The server-side resolver will use its publisher
-  // fallback to map these to a flagship title if no specific game is identified.
-  /\b(valve|ubisoft|rockstar|bethesda|blizzard|activision|electronic arts|\bea\b|square enix|capcom|konami|sega|bandai|namco|epic games|take[\s-]?two|2k games|cd projekt|fromsoftware|naughty dog|insomniac|guerrilla|hideo kojima|kojima)\b/i,
-  /\b(nintendo|sony interactive|playstation studios|xbox game studios|microsoft gaming)\b/i,
-  // Generic game signals
-  /\b(dlc|expansion|update|patch|season pass|battle pass|early access|game pass|gamepass)\b/i,
-  /\b(ps5|xbox|nintendo|playstation|steam deck)\b.*\b(game|title|exclusive|release|launch)\b/i,
-  /\b(release date|launch date|out now|available now|coming to)\b/i,
-  /\b(developer|studio|publisher|studio)\b.*\b(announce|reveal|confirm|show)\b/i,
-];
-
-// Titles that should never hit RAWG (guide/puzzle/movie content)
+// Titles that should never hit RAWG (guide/puzzle/movie content).
+// Everything else is assumed to be gaming-related — these feeds are gaming-news only,
+// so the cost of a few wasted RAWG lookups is far less than the UX cost of blank cards.
+// Adding a new game/franchise/publisher should NEVER require a code change here.
 const SKIP_RAWG_PATTERNS = [
   /\bConnections\b.{0,15}#\d+/i,
   /NYT Connections/i,
@@ -117,28 +97,11 @@ const SKIP_RAWG_PATTERNS = [
 ];
 
 function shouldFetchRAWG(title: string): boolean {
-  // Hard skip list first
-  if (SKIP_RAWG_PATTERNS.some(p => p.test(title))) return false;
-  // Short titles (≤ 4 words) are likely bare game names — always try RAWG
-  const wordCount = title.split(/\s+/).filter(w => w.length > 0).length;
-  if (wordCount <= 4) return true;
-  // Check if it seems like a gaming article
-  const hasGameSignal = GAME_TITLE_SIGNALS.some(p => p.test(title));
-  if (hasGameSignal) return true;
-  // Generic: has at least one of these gaming-news words
-  const lc = title.toLowerCase();
-  return (
-    lc.includes('game') ||
-    lc.includes('gaming') ||
-    lc.includes('sequel') ||
-    lc.includes('developer') ||
-    lc.includes('studio') ||
-    lc.includes('remaster') ||
-    lc.includes('remake') ||
-    lc.includes('open world') ||
-    lc.includes('multiplayer') ||
-    lc.includes('single-player')
-  );
+  // Single source of truth: only skip if the title is clearly NOT about a game
+  // (Wordle/Connections puzzles, movie reviews, deals roundups). Everything else
+  // is gaming-related by virtue of being in a gaming feed — let the server decide
+  // whether RAWG can resolve a specific title.
+  return !SKIP_RAWG_PATTERNS.some(p => p.test(title));
 }
 
 export function useLazyImage(title: string, initialThumbnail: string | null) {

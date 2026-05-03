@@ -334,6 +334,46 @@ router.get("/feed/vgc", async (req, res) => {
 });
 
 // ── RAWG image proxy (keeps API key server-side) ─────────────────────────────
+// Server-side cache + in-flight dedupe. Client also caches in localStorage, but the
+// server cache is shared across users — so the very first user to view a popular
+// article pays the n-gram fan-out cost ONCE, and every subsequent user (and every
+// other user across any browser) gets a cache hit. The in-flight map ensures that
+// if 50 cards mount simultaneously and request the same title, only ONE RAWG fan-out
+// runs and the other 49 await its promise.
+type RawgImageResult = { image: string; name: string; slug: string } | { error: string; status: number };
+interface RawgCacheEntry { result: RawgImageResult; ts: number; }
+const RAWG_CACHE = new Map<string, RawgCacheEntry>();
+const RAWG_INFLIGHT = new Map<string, Promise<RawgImageResult>>();
+const RAWG_POSITIVE_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
+const RAWG_NEGATIVE_TTL_MS = 6 * 60 * 60 * 1000;       // 6 hours
+const RAWG_CACHE_MAX_ENTRIES = 5000;                   // soft cap to bound memory
+
+function rawgCacheGet(key: string): RawgImageResult | null {
+  const entry = RAWG_CACHE.get(key);
+  if (!entry) return null;
+  const isPositive = "image" in entry.result;
+  const ttl = isPositive ? RAWG_POSITIVE_TTL_MS : RAWG_NEGATIVE_TTL_MS;
+  if (Date.now() - entry.ts > ttl) {
+    RAWG_CACHE.delete(key);
+    return null;
+  }
+  return entry.result;
+}
+
+function rawgCacheSet(key: string, result: RawgImageResult): void {
+  // Naive size cap — if the map gets too big, drop the oldest 10% of entries.
+  // Map iteration order is insertion order, so the first entries are the oldest.
+  if (RAWG_CACHE.size >= RAWG_CACHE_MAX_ENTRIES) {
+    const dropCount = Math.floor(RAWG_CACHE_MAX_ENTRIES * 0.1);
+    let dropped = 0;
+    for (const k of RAWG_CACHE.keys()) {
+      RAWG_CACHE.delete(k);
+      if (++dropped >= dropCount) break;
+    }
+  }
+  RAWG_CACHE.set(key, { result, ts: Date.now() });
+}
+
 router.get("/rawg/image", async (req, res) => {
   const rawQuery = req.query["q"];
   if (!rawQuery || typeof rawQuery !== "string") {
@@ -344,6 +384,36 @@ router.get("/rawg/image", async (req, res) => {
   const apiKey = process.env["RAWG_API_KEY"];
   if (!apiKey) {
     res.status(500).json({ error: "RAWG API key not configured" });
+    return;
+  }
+
+  // Cache key: lowercased + collapsed-whitespace raw query. Same article title from
+  // two slightly different feeds resolves identically.
+  const cacheKey = rawQuery.toLowerCase().replace(/\s+/g, " ").trim();
+
+  // 1) Cache hit?
+  const cached = rawgCacheGet(cacheKey);
+  if (cached) {
+    if ("image" in cached) {
+      res.setHeader("Cache-Control", "public, max-age=3600");
+      res.json(cached);
+    } else {
+      res.status(cached.status).json({ error: cached.error });
+    }
+    return;
+  }
+
+  // 2) In-flight dedupe — if another request is already resolving this exact title,
+  // await its result instead of starting a parallel fan-out.
+  const inflight = RAWG_INFLIGHT.get(cacheKey);
+  if (inflight) {
+    const result = await inflight;
+    if ("image" in result) {
+      res.setHeader("Cache-Control", "public, max-age=3600");
+      res.json(result);
+    } else {
+      res.status(result.status).json({ error: result.error });
+    }
     return;
   }
 
@@ -367,9 +437,21 @@ router.get("/rawg/image", async (req, res) => {
     .trim();
 
   if (!scrubbed || scrubbed.length < 2) {
-    res.status(400).json({ error: "Query too noisy to resolve" });
+    const result: RawgImageResult = { error: "Query too noisy to resolve", status: 400 };
+    rawgCacheSet(cacheKey, result);
+    res.status(400).json({ error: result.error });
     return;
   }
+
+  // Register an in-flight promise so concurrent requests for the same title coalesce.
+  let resolveInflight!: (r: RawgImageResult) => void;
+  const inflightPromise = new Promise<RawgImageResult>(r => { resolveInflight = r; });
+  RAWG_INFLIGHT.set(cacheKey, inflightPromise);
+  const finalize = (result: RawgImageResult): void => {
+    rawgCacheSet(cacheKey, result);
+    resolveInflight(result);
+    RAWG_INFLIGHT.delete(cacheKey);
+  };
 
   // Publisher / platform fallback: when a title only mentions a publisher or platform
   // (e.g. "Gamespot: PlayStation spokesperson on DRM"), there's no specific game to look up.
@@ -503,6 +585,88 @@ router.get("/rawg/image", async (req, res) => {
       }
     }
 
+    // ── N-gram phrase extraction (future-proof title matching) ────────────────
+    // The full-title search above can fail when the actual game name is buried inside a
+    // long noisy headline (e.g. "...the scrapped Team Fortress 2 iteration..."). RAWG's
+    // relevance score gets diluted across all the noise words and the right game falls
+    // off the result page. Solution: slide 2-, 3-, and 4-word windows across the scrubbed
+    // title and search RAWG for each — the actual game name almost always appears as one
+    // of these windows. Run them in parallel to keep latency low. This means we don't have
+    // to hand-maintain a list of every game/franchise in existence.
+    if (!bestResult) {
+      const allWords = scrubbed.split(/\s+/).filter(w => w.length > 0);
+      const alreadyTried = new Set(queries.map(q => q.toLowerCase()));
+      const STOP_PHRASE_WORDS = new Set([...STOP_WORDS, "his", "her", "him", "she", "have", "had", "who", "what", "when", "where", "why", "how"]);
+      const phrases: string[] = [];
+      // Longer windows are more specific — try 4-word, then 3-word, then 2-word.
+      for (const size of [4, 3, 2]) {
+        for (let i = 0; i + size <= allWords.length; i++) {
+          const window = allWords.slice(i, i + size).join(" ");
+          const lc = window.toLowerCase();
+          if (alreadyTried.has(lc)) continue;
+          alreadyTried.add(lc);
+          // Skip windows that are entirely stop words / noise — they'd just match popular
+          // games on irrelevant words ("the new" → matches everything).
+          const hasContentWord = window.split(" ").some(w => !STOP_PHRASE_WORDS.has(w.toLowerCase()) && w.length > 2);
+          if (!hasContentWord) continue;
+          phrases.push(window);
+        }
+      }
+      // Cap the number of parallel calls to bound RAWG load. 8 is plenty in practice
+      // — the actual game name surfaces in one of the first few windows for any sane title.
+      const PHRASE_CALL_BUDGET = 8;
+      const targetedPhrases = phrases.slice(0, PHRASE_CALL_BUDGET);
+      if (targetedPhrases.length > 0) {
+        req.log.info({ rawQuery, phrases: targetedPhrases }, "RAWG n-gram phrase search");
+        const phraseResults = await Promise.all(
+          targetedPhrases.map(async (phrase) => {
+            try {
+              const phraseUrl = new URL("https://api.rawg.io/api/games");
+              phraseUrl.searchParams.set("key", apiKey);
+              phraseUrl.searchParams.set("search", phrase);
+              phraseUrl.searchParams.set("page_size", "5");
+              phraseUrl.searchParams.set("search_exact", "false");
+              const phraseResp = await fetch(phraseUrl.toString(), {
+                headers: { "User-Agent": "Leakr/1.0" },
+                signal: AbortSignal.timeout(6000),
+              });
+              if (!phraseResp.ok) return [];
+              const phraseData = (await phraseResp.json()) as {
+                results?: Array<{ background_image?: string; name?: string; slug?: string; ratings_count?: number }>;
+              };
+              return (phraseData.results ?? []).filter(
+                r =>
+                  r.background_image &&
+                  !r.background_image.includes("media/screenshots") &&
+                  r.name &&
+                  r.slug &&
+                  isRelevant(r.name),
+              );
+            } catch {
+              return [];
+            }
+          }),
+        );
+        // Across every phrase's candidates, pick the highest-rated game. This naturally
+        // surfaces "Team Fortress 2" (2940 ratings) over "Fortress Forever" (1 rating)
+        // because the full-title isRelevant check ensures every candidate is on-topic.
+        const allCandidates = phraseResults.flat();
+        if (allCandidates.length > 0) {
+          const phraseBest = allCandidates.reduce((a, b) =>
+            (b.ratings_count ?? 0) > (a.ratings_count ?? 0) ? b : a,
+          );
+          if ((phraseBest.ratings_count ?? 0) > 10) {
+            bestResult = {
+              background_image: phraseBest.background_image!,
+              name: phraseBest.name!,
+              slug: phraseBest.slug!,
+              ratings_count: phraseBest.ratings_count,
+            };
+          }
+        }
+      }
+    }
+
     // Publisher / platform fallback: if no specific game matched but the title mentions
     // a publisher/platform, search RAWG for a representative flagship game.
     if (!bestResult && publisherFallback) {
@@ -568,18 +732,25 @@ router.get("/rawg/image", async (req, res) => {
     }
 
     if (!bestResult) {
+      finalize({ error: "No suitable image found", status: 404 });
       res.status(404).json({ error: "No suitable image found" });
       return;
     }
 
-    res.setHeader("Cache-Control", "public, max-age=3600");
-    res.json({
+    const successResult: RawgImageResult = {
       image: bestResult.background_image,
       name: bestResult.name,
       slug: bestResult.slug,
-    });
+    };
+    finalize(successResult);
+    res.setHeader("Cache-Control", "public, max-age=3600");
+    res.json(successResult);
   } catch (err) {
     req.log.error({ err }, "RAWG API request failed");
+    // Transient errors (network/timeout/5xx) are NOT cached — we want to retry on next
+    // request. Just clear the in-flight slot so a retry isn't blocked.
+    resolveInflight({ error: "RAWG request failed", status: 500 });
+    RAWG_INFLIGHT.delete(cacheKey);
     res.status(500).json({ error: "RAWG request failed" });
   }
 });
