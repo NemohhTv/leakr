@@ -16,8 +16,18 @@ export function GridCard({ item, onOpenDossier }: GridCardProps) {
   const { imgSrc, isLoading, isError, isFromRawg, ref, onImageError } = useLazyImage(item.title, item.thumbnail);
 
   return (
-    <div 
-      className="group relative flex flex-col bg-card border border-card-border overflow-hidden transition-all duration-300 hover:border-primary/30 hover:shadow-[0_0_20px_rgba(255,34,34,0.1)] rounded-lg"
+    <div
+      role="button"
+      tabIndex={0}
+      onClick={() => onOpenDossier(item)}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onOpenDossier(item);
+        }
+      }}
+      aria-label={`Open dossier for ${item.title}`}
+      className="group relative flex flex-col bg-card border border-card-border overflow-hidden transition-all duration-300 hover:border-primary/30 hover:shadow-[0_0_20px_rgba(255,34,34,0.1)] rounded-lg cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
       data-testid={`card-${item.id}`}
     >
       {/* Image Area */}
@@ -97,7 +107,7 @@ export function GridCard({ item, onOpenDossier }: GridCardProps) {
           </div>
 
           <button
-            onClick={() => onOpenDossier(item)}
+            onClick={(e) => { e.stopPropagation(); onOpenDossier(item); }}
             className="text-xs font-bold text-primary hover:text-white uppercase tracking-wider flex items-center gap-1 transition-colors"
             data-testid={`analyze-report-${item.id}`}
           >
