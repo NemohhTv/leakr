@@ -394,11 +394,21 @@ router.get("/rawg/image", async (req, res) => {
   const normalizeWord = (s: string): string =>
     s.normalize("NFKD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
 
-  // Significant words from the original query for relevance check
+  // Significant words from the original query for relevance check.
+  // The "generic" list strips words that appear in tons of game names AND tons of article
+  // titles (e.g. "video game studio") — they create false positives like
+  // "Ghostbusters: The Video Game" matching a Ubisoft layoffs article.
+  const STOP_WORDS = new Set([
+    "the", "and", "for", "with", "from", "that", "this", "are", "was", "has", "its", "not", "but",
+    // generic words that match too many titles
+    "video", "game", "games", "online", "world", "year", "years", "time", "times", "story",
+    "edition", "definitive", "remastered", "deluxe", "ultimate", "complete", "collection",
+    "new", "latest", "next", "hits", "history", "players", "people", "play", "playing",
+  ]);
   const queryWords = new Set(
     normalizeWord(scrubbed)
       .split(/\s+/)
-      .filter(w => w.length > 2 && !["the", "and", "for", "with", "from", "that", "this", "are", "was", "has", "its", "not", "but"].includes(w)),
+      .filter(w => w.length > 2 && !STOP_WORDS.has(w)),
   );
 
   // Require a game result to share enough key words with the query.
@@ -436,10 +446,15 @@ router.get("/rawg/image", async (req, res) => {
       const url = new URL("https://api.rawg.io/api/games");
       url.searchParams.set("key", apiKey);
       url.searchParams.set("search", query);
-      url.searchParams.set("page_size", "5");
+      url.searchParams.set("page_size", "10");
       url.searchParams.set("search_exact", "false");
-      url.searchParams.set("exclude_additions", "true"); // No DLCs / expansions
-      url.searchParams.set("ordering", "-added");        // Most added = most popular
+      // Use RAWG's default relevance ranking. Previously we set ordering=-added (most-played)
+      // which made noisy long titles return GTA V / Witcher 3 / Portal 2 regardless of what
+      // the article was actually about — none would survive the isRelevant filter and we'd
+      // fall through to the publisher fallback. Relevance ordering surfaces the actually-
+      // referenced game (e.g. "Team Fortress 2" for a TF2 article) within the top results.
+      // Also no exclude_additions=true — RAWG mis-classifies "Counter-Strike 2" as an addition.
+      // The isRelevant word-overlap filter + 50-rating floor are strong enough to reject DLCs.
 
       const response = await fetch(url.toString(), {
         headers: { "User-Agent": "Leakr/1.0" },
@@ -473,8 +488,10 @@ router.get("/rawg/image", async (req, res) => {
           (b.ratings_count ?? 0) > (a.ratings_count ?? 0) ? b : a,
         );
 
-        // Require meaningful community traction to avoid obscure / mismatched results
-        if ((best.ratings_count ?? 0) > 50) {
+        // Require some community traction to avoid obscure / mismatched results.
+        // Lowered from 50→10 so legitimate smaller titles like Crimson Desert (19 ratings)
+        // resolve. The isRelevant word-overlap filter is doing the heavy lifting on quality.
+        if ((best.ratings_count ?? 0) > 10) {
           bestResult = {
             background_image: best.background_image!,
             name: best.name!,
