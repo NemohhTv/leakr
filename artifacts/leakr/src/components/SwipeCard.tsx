@@ -34,12 +34,17 @@ export function SwipeCard({ item, onOpenDossier, isActive }: SwipeCardProps) {
       )}
       <div className="absolute inset-0 bg-black/60" />
 
-      {/* Main Image Area */}
-      <motion.div 
+      {/* Main Image Area — clickable on all screens (mobile users can tap the image
+          to open the dossier without scrolling to the button). */}
+      <motion.button
+        type="button"
+        onClick={() => onOpenDossier(item)}
+        aria-label={`Open dossier for ${item.title}`}
+        data-testid={`open-dossier-image-${item.id}`}
         initial={{ scale: 0.95, opacity: 0 }}
         animate={{ scale: isActive ? 1 : 0.95, opacity: isActive ? 1 : 0.5 }}
         transition={{ duration: 0.5, ease: "easeOut" }}
-        className="relative z-10 w-full max-w-[80vw] max-h-[50vh] flex items-center justify-center -translate-y-16"
+        className="absolute z-10 left-1/2 -translate-x-1/2 top-[14vh] md:top-1/2 md:-translate-y-[calc(50%+4rem)] w-full max-w-[85vw] md:max-w-[70vw] max-h-[45vh] flex items-center justify-center cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 rounded-lg"
       >
         {isLoading ? (
           <div className="w-full aspect-video rounded-lg overflow-hidden border border-white/10 shimmer" />
@@ -61,20 +66,21 @@ export function SwipeCard({ item, onOpenDossier, isActive }: SwipeCardProps) {
             <div className="absolute bottom-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-primary/50 to-transparent" />
           </div>
         ) : (
-          <div className="relative shadow-2xl shadow-black/80 rounded-lg overflow-hidden border border-white/10">
-            <img 
-              src={imgSrc} 
-              alt={item.title} 
+          <div className="relative shadow-2xl shadow-black/80 rounded-lg overflow-hidden border border-white/10 transition-transform active:scale-[0.98]">
+            <img
+              src={imgSrc}
+              alt={item.title}
               onError={onImageError}
-              className="max-w-full max-h-[50vh] object-contain"
+              className="max-w-full max-h-[45vh] object-contain"
               loading="lazy"
+              draggable={false}
             />
           </div>
         )}
-      </motion.div>
+      </motion.button>
 
       {/* Bottom Scrim & Content */}
-      <div className="absolute bottom-0 left-0 right-0 z-20 bg-gradient-to-t from-black via-black/90 to-transparent pt-32 pb-8 px-6 md:px-12 flex flex-col items-center text-center">
+      <div className="absolute bottom-0 left-0 right-0 z-20 bg-gradient-to-t from-black via-black/95 to-transparent pt-24 md:pt-32 pb-6 md:pb-8 px-6 md:px-12 flex flex-col items-center text-center">
         <motion.div 
           initial={{ y: 20, opacity: 0 }}
           animate={{ y: isActive ? 0 : 20, opacity: isActive ? 1 : 0 }}
