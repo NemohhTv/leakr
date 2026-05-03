@@ -32,6 +32,7 @@ export function Header({
     { label: "IGN", value: "ign" },
     { label: "InsiderGaming", value: "insider" },
     { label: "VGC", value: "vgc" },
+    { label: "Gameranx", value: "gameranx" },
   ];
 
   const tiers: TierFilter[] = ["S", "A", "B", "C", "F"];

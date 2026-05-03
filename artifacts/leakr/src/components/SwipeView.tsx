@@ -24,6 +24,7 @@ const SOURCES: { label: string; value: SourceFilter }[] = [
   { label: "IGN", value: "ign" },
   { label: "InsiderGaming", value: "insider" },
   { label: "VGC", value: "vgc" },
+  { label: "Gameranx", value: "gameranx" },
 ];
 const TIERS: TierFilter[] = ["S", "A", "B", "C", "F"];
 

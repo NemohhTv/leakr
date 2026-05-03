@@ -46,6 +46,7 @@ const CREDIBLE_OUTLET_DOMAINS = [
   "nytimes.com",
   "thegamer.com",
   "gamesradar.com",
+  "gameranx.com",
 ];
 
 export function isCredibleOutletUrl(url: string): boolean {
@@ -573,7 +574,7 @@ function applyCorroboration(items: IntelItem[]): IntelItem[] {
 
 // ── Cache helpers ─────────────────────────────────────────────────────────────
 const CACHE_TTL = 15 * 60 * 1000;
-const CACHE_VERSION = "v21";
+const CACHE_VERSION = "v22";
 
 async function fetchWithCache<T>(
   cacheKey: string,
@@ -666,6 +667,13 @@ export async function fetchFeedData(force = false): Promise<IntelItem[]> {
         fetch("/api/feed/vgc")
           .then(r => { if (!r.ok) throw new Error("vgc " + r.status); return r.text(); })
           .then(xml => parseRSSFeed(xml, "vgc")),
+    },
+    {
+      key: "leakr_cache_gameranx",
+      fetcher: () =>
+        fetch("/api/feed/gameranx")
+          .then(r => { if (!r.ok) throw new Error("gameranx " + r.status); return r.text(); })
+          .then(xml => parseRSSFeed(xml, "gameranx")),
     },
   ];
 

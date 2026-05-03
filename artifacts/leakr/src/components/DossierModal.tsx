@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { IntelItem } from "@/types";
+import { IntelItem, IntelSource } from "@/types";
 import { motion, AnimatePresence } from "framer-motion";
 import { X, ExternalLink, ShieldAlert, Zap, Clock, CheckCircle2, AlertTriangle, Link2 } from "lucide-react";
 import { TierBadge } from "./TierBadge";
@@ -27,12 +27,13 @@ function useEscapeToClose(active: boolean, onClose: () => void) {
   }, [active, onClose]);
 }
 
-const SOURCE_DISPLAY: Record<string, string> = {
+const SOURCE_DISPLAY: Record<IntelSource, string> = {
   reddit: "r/GamingLeaksAndRumours",
   gamingnews: "r/gamingnews",
   ign: "IGN",
   insider: "Insider Gaming",
   vgc: "Video Games Chronicle",
+  gameranx: "Gameranx",
 };
 
 const TIER_LABEL: Record<string, string> = {

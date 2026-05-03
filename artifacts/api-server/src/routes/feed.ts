@@ -333,6 +333,32 @@ router.get("/feed/vgc", async (req, res) => {
   }
 });
 
+// ── RSS: Gameranx ────────────────────────────────────────────────────────────
+router.get("/feed/gameranx", async (req, res) => {
+  try {
+    const response = await fetch("https://gameranx.com/feed/", {
+      headers: {
+        "User-Agent": "Leakr/1.0 News Aggregator",
+        Accept: "application/rss+xml, application/xml, text/xml",
+      },
+      signal: AbortSignal.timeout(8000),
+    });
+
+    if (!response.ok) {
+      res.status(response.status).json({ error: "Failed to fetch Gameranx feed" });
+      return;
+    }
+
+    const xml = await response.text();
+    res.setHeader("Content-Type", "application/xml");
+    res.setHeader("Cache-Control", "public, max-age=900");
+    res.send(xml);
+  } catch (err) {
+    req.log.error({ err }, "Gameranx feed fetch failed");
+    res.status(500).json({ error: "Failed to fetch Gameranx feed" });
+  }
+});
+
 // ── RAWG image proxy (keeps API key server-side) ─────────────────────────────
 // Server-side cache + in-flight dedupe. Client also caches in localStorage, but the
 // server cache is shared across users — so the very first user to view a popular

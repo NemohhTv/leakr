@@ -7,6 +7,7 @@ const SOURCE_CREDIBILITY: Record<IntelSource, number> = {
   vgc: 0.90,       // Video Games Chronicle — dedicated, well-sourced
   insider: 0.85,   // Insider Gaming — specialty outlet
   ign: 0.78,       // IGN — mainstream but credible
+  gameranx: 0.72,  // Gameranx — mainstream gaming news/lists, decent track record
   gamingnews: 0.62,// r/gamingnews — aggregated, variable
   reddit: 0.55,    // r/GamingLeaksAndRumours — enthusiast posts
 };
@@ -128,10 +129,10 @@ export function analyzeTierAndPlausibility(
     t.includes("announcement") ||
     t.includes("release date");
 
-  // Confirmed game updates from credible sources (VGC, Insider, IGN) are S-tier facts
+  // Confirmed game updates from credible sources (VGC, Insider, IGN, Gameranx) are S-tier facts
   const isConfirmedFromCredible =
     hasConfirmedNewsKeyword &&
-    (source === "vgc" || source === "insider" || source === "ign");
+    (source === "vgc" || source === "insider" || source === "ign" || source === "gameranx");
 
   // Verified official statement — named person/company giving attributed quote or explanation
   // Only from credible outlets; these are factual, not rumors → A-tier
@@ -139,7 +140,7 @@ export function analyzeTierAndPlausibility(
     !isConfirmedFromCredible &&
     !isOfficialConfirmed &&
     countMatches(t, OFFICIAL_STATEMENT_KEYWORDS) > 0 &&
-    (source === "vgc" || source === "insider" || source === "ign");
+    (source === "vgc" || source === "insider" || source === "ign" || source === "gameranx");
 
   if (isOfficialConfirmed || isConfirmedFromCredible) {
     tier = "S";
@@ -162,7 +163,7 @@ export function analyzeTierAndPlausibility(
     tier = "C";
   } else {
     // Fall-through: neutral gaming news from a credible outlet → B tier
-    if (source === "vgc" || source === "insider" || source === "ign") {
+    if (source === "vgc" || source === "insider" || source === "ign" || source === "gameranx") {
       tier = "B";
     } else if (sourcedFromCredibleOutlet) {
       // Reddit post linking to a credible outlet — treat as B-tier news

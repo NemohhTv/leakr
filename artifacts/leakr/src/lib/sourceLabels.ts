@@ -6,6 +6,7 @@ export const SOURCE_DISPLAY_LABELS: Record<IntelSource, string> = {
   ign: "IGN",
   insider: "InsiderGaming",
   vgc: "VGC",
+  gameranx: "Gameranx",
 };
 
 export function sourceLabel(source: IntelSource): string {
