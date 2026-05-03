@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { motion, AnimatePresence, PanInfo } from "framer-motion";
-import { X, SlidersHorizontal, ChevronLeft, ChevronRight } from "lucide-react";
+import { X, SlidersHorizontal, ChevronLeft, ChevronRight, Radio } from "lucide-react";
 import { IntelItem } from "@/types";
 import { SwipeCard } from "./SwipeCard";
 import type { SourceFilter, TierFilter } from "./Header";
@@ -122,6 +122,26 @@ export function SwipeView({
           />
         ))}
       </motion.div>
+
+      {/* Brand mark — subtle pulsing-radio + LEAKR wordmark centered at the top
+          so users always know which app they're in, even chrome-free. Sits
+          between the filter and exit buttons; pointer-events-none so it never
+          blocks taps on a slide. */}
+      <div className="absolute top-3 left-1/2 -translate-x-1/2 z-40 flex items-center gap-2 pointer-events-none select-none">
+        <div className="relative flex items-center justify-center">
+          <Radio className="w-3.5 h-3.5 text-primary" />
+          <span
+            className="absolute inset-0 rounded-full animate-ping opacity-30 bg-primary"
+            style={{ animationDuration: "1.8s" }}
+          />
+        </div>
+        <img
+          src="/leakr-logo.png"
+          alt="LEAKR"
+          className="h-5 w-auto object-contain opacity-80"
+          draggable={false}
+        />
+      </div>
 
       {/* Persistent close (X) button — gives keyboard / mouse users an obvious
           way to exit swipe mode without relying on gestures. Positioned in
