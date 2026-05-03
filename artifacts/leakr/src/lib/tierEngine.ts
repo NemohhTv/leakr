@@ -106,6 +106,7 @@ export function analyzeTierAndPlausibility(
   source: IntelSource,
   description = "",
   corroborated = false,
+  sourcedFromCredibleOutlet = false,
 ): PlausibilityResult {
   const t = (title + " " + description).toLowerCase();
   const signals: string[] = [];
@@ -162,6 +163,9 @@ export function analyzeTierAndPlausibility(
   } else {
     // Fall-through: neutral gaming news from a credible outlet → B tier
     if (source === "vgc" || source === "insider" || source === "ign") {
+      tier = "B";
+    } else if (sourcedFromCredibleOutlet) {
+      // Reddit post linking to a credible outlet — treat as B-tier news
       tier = "B";
     } else {
       tier = "F";
@@ -242,6 +246,13 @@ export function analyzeTierAndPlausibility(
   // 10. VGC / Insider source premium
   if (source === "vgc") signals.push("VGC premium source");
   if (source === "insider") signals.push("Insider Gaming source");
+
+  // 10b. Reddit post linking to a credible outlet — single uplift to avoid double-counting
+  // with the tier B floor in the tier-determination block above.
+  if (sourcedFromCredibleOutlet && (source === "reddit" || source === "gamingnews")) {
+    score += 6;
+    signals.push("Linked to credible outlet");
+  }
 
   // 11. Clamp to tier ranges (soft — don't override strong signals)
   const tierRanges: Record<Tier, [number, number]> = {

@@ -13,7 +13,7 @@ interface GridCardProps {
 }
 
 export function GridCard({ item, onOpenDossier }: GridCardProps) {
-  const { imgSrc, isLoading, isError, isFromRawg, ref } = useLazyImage(item.title, item.thumbnail);
+  const { imgSrc, isLoading, isError, isFromRawg, ref, onImageError } = useLazyImage(item.title, item.thumbnail);
 
   return (
     <div 
@@ -44,6 +44,7 @@ export function GridCard({ item, onOpenDossier }: GridCardProps) {
           <img 
             src={imgSrc} 
             alt={item.title} 
+            onError={onImageError}
             className="absolute inset-0 w-full h-full object-cover transition-transform duration-700 group-hover:scale-105 opacity-80 group-hover:opacity-100"
             loading="lazy"
           />

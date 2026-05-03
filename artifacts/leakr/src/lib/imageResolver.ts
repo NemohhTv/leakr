@@ -69,6 +69,7 @@ export function useLazyImage(title: string, initialThumbnail: string | null) {
   const [imgSrc, setImgSrc] = useState<string | null>(initialThumbnail);
   const [isLoading, setIsLoading] = useState(!initialThumbnail);
   const [isError, setIsError] = useState(false);
+  const [usedRawg, setUsedRawg] = useState(false);
   const ref = useRef<HTMLDivElement | HTMLImageElement>(null);
 
   useEffect(() => {
@@ -111,6 +112,7 @@ export function useLazyImage(title: string, initialThumbnail: string | null) {
       setImgSrc(cached);
       setIsLoading(false);
       setIsError(!cached);
+      setUsedRawg(!!cached);
       return;
     }
 
@@ -125,6 +127,7 @@ export function useLazyImage(title: string, initialThumbnail: string | null) {
       if (data.image) {
         imageCache[title] = data.image;
         setImgSrc(data.image);
+        setUsedRawg(true);
       } else {
         imageCache[title] = null;
         setIsError(true);
@@ -137,7 +140,21 @@ export function useLazyImage(title: string, initialThumbnail: string | null) {
     }
   };
 
-  const isFromRawg = !initialThumbnail && !!imgSrc && !isError;
+  // Called by <img onError> when the URL fails to load (expired CDN, 404, etc.)
+  // Falls back to RAWG once if the broken image was the source-provided thumbnail.
+  const onImageError = () => {
+    if (!usedRawg && shouldFetchRAWG(title)) {
+      setImgSrc(null);
+      setIsLoading(true);
+      fetchRAWGImage();
+    } else {
+      setImgSrc(null);
+      setIsError(true);
+      setIsLoading(false);
+    }
+  };
 
-  return { imgSrc, isLoading, isError, isFromRawg, ref };
+  const isFromRawg = usedRawg && !!imgSrc && !isError;
+
+  return { imgSrc, isLoading, isError, isFromRawg, ref, onImageError };
 }

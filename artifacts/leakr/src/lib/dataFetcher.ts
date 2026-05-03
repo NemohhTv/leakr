@@ -28,8 +28,38 @@ function isBlockedSourceUrl(url: string): boolean {
   }
 }
 
+// ── Credible outlet detection — boosts plausibility when Reddit posts link here
+const CREDIBLE_OUTLET_DOMAINS = [
+  "videogameschronicle.com", "vgc.com",
+  "ign.com",
+  "insider-gaming.com",
+  "eurogamer.net",
+  "gamesindustry.biz",
+  "gamespot.com",
+  "gameinformer.com",
+  "rockpapershotgun.com",
+  "pcgamesn.com",
+  "bloomberg.com",
+  "reuters.com",
+  "wsj.com",
+  "ft.com",
+  "nytimes.com",
+  "thegamer.com",
+  "gamesradar.com",
+];
+
+export function isCredibleOutletUrl(url: string): boolean {
+  try {
+    const host = new URL(url).hostname.replace(/^www\./, "");
+    return CREDIBLE_OUTLET_DOMAINS.some(d => host === d || host.endsWith("." + d));
+  } catch {
+    return false;
+  }
+}
+
 // ── Content guard: filter out non-gaming / guide content ─────────────────────
 const NON_GAMING_TITLE_PATTERNS: RegExp[] = [
+  // Puzzles / dailies
   /NYT Connections/i,
   /Connections Hints/i,
   /Connections Answers/i,
@@ -42,6 +72,7 @@ const NON_GAMING_TITLE_PATTERNS: RegExp[] = [
   /(Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday)[, ]+May/i,
   /Hints Today.{0,20}#\d+/i,
   /Answers for (Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday)/i,
+  // Movie / TV
   /Box Office/i,
   /Movie Review/i,
   /TV Show Review/i,
@@ -51,14 +82,37 @@ const NON_GAMING_TITLE_PATTERNS: RegExp[] = [
   /\bpodcast\b/i,
   /\bepisode \d+\b/i,
   /\bep\.?\s*\d+\b/i,
-  // Opinion / editorial pieces (not news)
+  // Opinion / editorial pieces (strict — no opinion content allowed)
   /^opinion[:\s—–]/i,
   /^editorial[:\s—–]/i,
   /\bopinion piece\b/i,
   /^(the )?(case for|case against)\b/i,
-  /^(here's why|let's talk about)\b/i,
+  /^(here['''`]?s )?why\b/i,
+  /^let['''`]?s talk about\b/i,
+  /\bcould learn (lessons? )?from\b/i,
+  /\b(has|have) a point\b/i,
+  /\bin defen[cs]e of\b/i,
+  // Opinion-style headlines: "Why X needs/should/matters" (modal verbs, not factual statements).
+  // Excludes "Why X is delayed" / "Why X was cancelled" — those are factual reporting.
+  /^why\b.{0,80}\b(needs|should|shouldn['''`]?t|matters|deserves|fails|failed|works)\b/i,
+  /^how\b.{0,40}\b(could|should|might)\b/i,
+  /\b(\d+|the|a|an)\s+reasons?\s+(why|to|that)\b/i,
+  /\bhot take\b/i,
+  /\bunpopular opinion\b/i,
+  /\b(deserves|deserved) (better|more|a)\b/i,
+  /\bshould['''`]?ve\b/i,
+  // Best of / list / ranking articles (not news)
+  /\btop\s+\d+\b/i,
+  /\b\d+\s+(best|worst|greatest)\b/i,
+  /\bbest\s+(games?|titles?|moments?|characters?|bosses?|levels?|weapons?|villains?)\b/i,
+  /\b(games?|titles?)\s+you\s+(must|should|need to|have to|can['''`]?t miss)\b/i,
+  /\bevery\b.{0,40}\branked\b/i,
+  /\btier list\b/i,
+  /\bgame of the (year|decade|generation)\b/i,
+  /\bunderrated games?\b/i,
+  /\bhidden gems?\b/i,
   // Deals / commerce articles (not news)
-  /\bbest deals?\b.{0,25}(today|this week|of the day)\b/i,
+  /\bbest deals?\b/i,
   /\bdeals (today|of the day|this week)\b/i,
   /today['''`]?s (best )?deals\b/i,
   /\bgame deals? (today|this week|of the day)\b/i,
@@ -71,6 +125,17 @@ const NON_GAMING_TITLE_PATTERNS: RegExp[] = [
   /\bfilm adaptation\b/i,
   /\bmovie (sequel|casting|script|premiere|box office)\b/i,
   /\b(mario|zelda|sonic|pokemon|kirby)\s+movie\b/i,
+  // Trading card games (physical or digital TCGs)
+  /\btrading card game\b/i,
+  /\b(tcg|ccg)\b/i,
+  /\byu-?gi-?oh\b/i,
+  /\bmagic[:\s]+the gathering\b/i,
+  /\bmtg arena\b/i,
+  /\bpok[eé]mon tcg\b/i,
+  /\bcard pack(s)?\b.{0,15}\b(reveal|expansion)\b/i,
+  // Speedrun / community events (typically not news)
+  /\bgames done quick\b/i,
+  /\bspeedrun(ning)?\b.{0,20}\b(record|world record)\b/i,
 ];
 
 const NON_GAMING_CATEGORIES = new Set([
@@ -112,8 +177,25 @@ function hasMeaningfulNewsSignal(title: string): boolean {
   return NEWS_SIGNAL_WORDS.some(w => lower.includes(w));
 }
 
+// LEGO video game allowlist — only match titles that clearly reference a LEGO video game.
+// Keep franchise list tight (specific named games) + require platform/gameplay context for others.
+const LEGO_VIDEOGAME_PATTERNS: RegExp[] = [
+  // Specific named LEGO video game franchises (no generic terms like "creator" or "builder" alone)
+  /\blego\s+(star wars|batman|marvel|harry potter|indiana jones|lord of the rings|hobbit|pirates of the caribbean|jurassic|the lego movie( videogame)?|dimensions|brawls|builder['''s] journey|fortnite|2k drive|horizon adventures|city undercover|island xtreme|rock band|rock raiders|brick tales|dc super-?villains|the incredibles|ninjago|bionicle|drome racers|stunt rally|racers \d|island \d)\b/i,
+  // Generic LEGO + explicit video game / platform context (handles new/unlisted titles)
+  /\blego\b.{0,40}\b(video ?game|gameplay|trailer|dlc|expansion|update|patch|switch 2?|ps5|ps4|playstation|xbox|steam|steam deck|epic games|game pass|gamepass|early access|release date|launch date|nintendo direct)\b/i,
+  /\b(video ?game|gameplay|dlc|game pass|gamepass|launch trailer|gameplay trailer)\b.{0,40}\blego\b/i,
+];
+
+function isLegoNonGameContent(title: string): boolean {
+  if (!/\blego\b/i.test(title)) return false;
+  // Allow only if title clearly references a LEGO video game
+  return !LEGO_VIDEOGAME_PATTERNS.some(p => p.test(title));
+}
+
 function isNonGamingItem(title: string, categories: string[]): boolean {
   if (NON_GAMING_TITLE_PATTERNS.some(p => p.test(title))) return true;
+  if (isLegoNonGameContent(title)) return true;
   const lcCats = categories.map(c => c.toLowerCase());
   const hasGuides = lcCats.includes("guides");
   const hasNonGaming = lcCats.some(c => NON_GAMING_CATEGORIES.has(c));
@@ -243,7 +325,10 @@ function parseRSSFeed(
     // Server-injected og:image takes highest priority, then RSS media tags
     const thumbnail = serverThumbnails[link] ?? extractSourceThumbnail(item, descRaw);
 
-    const { tier, plausibility, signals } = analyzeTierAndPlausibility(title, source, description);
+    const fromCredibleOutlet = isCredibleOutletUrl(link);
+    const { tier, plausibility, signals } = analyzeTierAndPlausibility(
+      title, source, description, false, fromCredibleOutlet,
+    );
 
     result.push({
       id: hashString(title + source),
@@ -333,23 +418,28 @@ function parseRedditAtom(
 
     // Thumbnail priority:
     // 1. Server-injected og:image from the linked article — permanent, high quality
-    // 2. media:thumbnail — Reddit's CDN preview (may expire after ~1hr for older posts)
-    // 3. First <img> from content HTML that's on Reddit's preview CDN
+    // 2. media:thumbnail — Reddit's CDN preview (expires after ~1hr — only use for fresh posts)
+    // 3. First <img> from content HTML that's on Reddit's preview CDN (also expires)
     let thumbnail: string | null = serverThumbnails[redditThreadUrl] ?? null;
 
-    if (!thumbnail) {
+    // Reddit's preview/external-preview CDN URLs are signed and expire ~1hr after the post.
+    // For older posts (top of week), these always fail — let the client-side RAWG handle it.
+    // If timestamp is invalid (NaN), be permissive and allow CDN URLs.
+    const parsedTime = new Date(publishedStr).getTime();
+    const ageMs = isNaN(parsedTime) ? 0 : Date.now() - parsedTime;
+    const isFreshEnoughForRedditCdn = ageMs < 60 * 60 * 1000; // 1 hour
+
+    if (!thumbnail && isFreshEnoughForRedditCdn) {
       const mediaThumbnail = entry.getElementsByTagNameNS("*", "thumbnail")[0];
       if (mediaThumbnail) {
         const url = mediaThumbnail.getAttribute("url");
-        // Reddit provides "self", "default", "nsfw" as placeholder strings — ignore those
         if (url && url.startsWith("http")) {
           thumbnail = url;
         }
       }
     }
 
-    // Fallback: preview image from content HTML (Reddit CDN only — avoids user memes)
-    if (!thumbnail) {
+    if (!thumbnail && isFreshEnoughForRedditCdn) {
       const imgs = Array.from(tempDiv.querySelectorAll("img[src]"));
       for (const img of imgs) {
         const src = img.getAttribute("src") || "";
@@ -366,7 +456,10 @@ function parseRedditAtom(
     }
 
     const description = (tempDiv.textContent || "").substring(0, 300).trim();
-    const { tier, plausibility, signals } = analyzeTierAndPlausibility(title, source, description);
+    const fromCredibleOutlet = isLinkPost && isCredibleOutletUrl(articleUrl);
+    const { tier, plausibility, signals } = analyzeTierAndPlausibility(
+      title, source, description, false, fromCredibleOutlet,
+    );
 
     result.push({
       id: hashString(title + source),
@@ -414,8 +507,9 @@ function applyCorroboration(items: IntelItem[]): IntelItem[] {
 
     if (!isCorroborated) return item;
 
+    const fromCredibleOutlet = isCredibleOutletUrl(item.url);
     const { tier, plausibility, signals } = analyzeTierAndPlausibility(
-      item.title, item.source, item.description, true,
+      item.title, item.source, item.description, true, fromCredibleOutlet,
     );
 
     return { ...item, tier, plausibility, signals, corroborated: true };
@@ -424,7 +518,7 @@ function applyCorroboration(items: IntelItem[]): IntelItem[] {
 
 // ── Cache helpers ─────────────────────────────────────────────────────────────
 const CACHE_TTL = 15 * 60 * 1000;
-const CACHE_VERSION = "v13";
+const CACHE_VERSION = "v15";
 
 async function fetchWithCache<T>(
   cacheKey: string,
