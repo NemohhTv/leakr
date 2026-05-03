@@ -1,4 +1,4 @@
-import { LayoutGrid, Maximize2 } from "lucide-react";
+import { LayoutGrid, Maximize2, Radio } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { IntelSource } from "@/types";
 
@@ -40,10 +40,14 @@ export function Header({
         {/* Top Row */}
         <div className="flex items-center justify-between h-16">
           <div className="flex items-center gap-3">
+            <div className="relative flex items-center justify-center">
+              <Radio className="w-5 h-5 text-primary" />
+              <span className="absolute inset-0 rounded-full animate-ping opacity-30 bg-primary" style={{ animationDuration: "1.8s" }} />
+            </div>
             <img
               src="/leakr-logo.png"
               alt="LEAKR"
-              className="h-9 w-auto object-contain select-none"
+              className="h-8 w-auto object-contain select-none"
               draggable={false}
             />
           </div>
