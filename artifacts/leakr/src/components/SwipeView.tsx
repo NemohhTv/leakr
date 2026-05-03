@@ -123,51 +123,59 @@ export function SwipeView({
         ))}
       </motion.div>
 
-      {/* Brand mark — subtle pulsing-radio + LEAKR wordmark centered at the top
-          so users always know which app they're in, even chrome-free. Sits
-          between the filter and exit buttons; pointer-events-none so it never
-          blocks taps on a slide. */}
-      <div className="absolute top-3 left-1/2 -translate-x-1/2 z-40 flex items-center gap-2 pointer-events-none select-none">
-        <div className="relative flex items-center justify-center">
-          <Radio className="w-3.5 h-3.5 text-primary" />
-          <span
-            className="absolute inset-0 rounded-full animate-ping opacity-30 bg-primary"
-            style={{ animationDuration: "1.8s" }}
+      {/* Floating top bar — three slots (filters · brand · exit) all vertically
+          aligned with each other. Container itself is pointer-events-none so
+          taps on the slide pass through; only the interactive children opt
+          back in via pointer-events-auto. */}
+      <div className="absolute top-3 inset-x-3 z-40 flex items-center justify-between pointer-events-none">
+        <button
+          type="button"
+          onClick={() => setDrawerOpen(true)}
+          aria-label="Open filters"
+          data-testid="swipe-filters-button"
+          className="pointer-events-auto p-2 rounded-full bg-black/50 hover:bg-black/80 text-zinc-300 hover:text-white border border-white/10 backdrop-blur-sm transition-colors"
+        >
+          <SlidersHorizontal className="w-4 h-4" />
+        </button>
+
+        {/* Brand mark — clickable to scroll the slide deck back to the first
+            card (mirrors how a logo "home" affordance behaves on most apps).
+            The pulsing radio icon visually balances the wordmark on the left. */}
+        <button
+          type="button"
+          onClick={() => {
+            const c = containerRef.current;
+            if (c) c.scrollTo({ top: 0, behavior: "smooth" });
+          }}
+          aria-label="Scroll to top of feed"
+          data-testid="swipe-brand-home"
+          className="pointer-events-auto flex items-center gap-2 select-none focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 rounded px-1 py-0.5 hover:opacity-100 opacity-90 transition-opacity"
+        >
+          <div className="relative flex items-center justify-center">
+            <Radio className="w-3.5 h-3.5 text-primary" />
+            <span
+              className="absolute inset-0 rounded-full animate-ping opacity-30 bg-primary"
+              style={{ animationDuration: "1.8s" }}
+            />
+          </div>
+          <img
+            src="/leakr-logo.png"
+            alt="LEAKR"
+            className="h-5 w-auto object-contain"
+            draggable={false}
           />
-        </div>
-        <img
-          src="/leakr-logo.png"
-          alt="LEAKR"
-          className="h-5 w-auto object-contain opacity-80"
-          draggable={false}
-        />
+        </button>
+
+        <button
+          type="button"
+          onClick={onExitSwipe}
+          aria-label="Exit swipe mode"
+          data-testid="swipe-exit-button"
+          className="pointer-events-auto p-2 rounded-full bg-black/50 hover:bg-black/80 text-zinc-300 hover:text-white border border-white/10 backdrop-blur-sm transition-colors"
+        >
+          <X className="w-4 h-4" />
+        </button>
       </div>
-
-      {/* Persistent close (X) button — gives keyboard / mouse users an obvious
-          way to exit swipe mode without relying on gestures. Positioned in
-          the top-right corner with a subtle backdrop so it remains visible
-          over both light (image-heavy) and dark slide regions. */}
-      <button
-        type="button"
-        onClick={onExitSwipe}
-        aria-label="Exit swipe mode"
-        data-testid="swipe-exit-button"
-        className="absolute top-3 right-3 z-40 p-2 rounded-full bg-black/50 hover:bg-black/80 text-zinc-300 hover:text-white border border-white/10 backdrop-blur-sm transition-colors"
-      >
-        <X className="w-4 h-4" />
-      </button>
-
-      {/* Persistent filters button — mirror of the X on the opposite corner so
-          mouse / keyboard users can open the filter drawer without swiping. */}
-      <button
-        type="button"
-        onClick={() => setDrawerOpen(true)}
-        aria-label="Open filters"
-        data-testid="swipe-filters-button"
-        className="absolute top-3 left-3 z-40 p-2 rounded-full bg-black/50 hover:bg-black/80 text-zinc-300 hover:text-white border border-white/10 backdrop-blur-sm transition-colors"
-      >
-        <SlidersHorizontal className="w-4 h-4" />
-      </button>
 
       {/* Edge hints — fade out after 3.5s so the view becomes chrome-free.
           pointer-events-none ensures they never block taps on the slide. */}
