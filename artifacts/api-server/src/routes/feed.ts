@@ -239,8 +239,10 @@ async function fetchOgImage(articleUrl: string): Promise<string | null> {
     });
     if (!res.ok) { ogImageCache.set(articleUrl, null); return null; }
 
-    // Read full text — og:image is always in <head>, usually in the first 20KB
-    const html = (await res.text()).slice(0, 25_000);
+    // Read enough HTML to reliably reach og:image. Many WordPress sites (tech4gamers,
+    // gameinformer, etc.) inject lots of analytics/preload tags before og:image, pushing
+    // it past 25KB. 60KB covers the vast majority while keeping memory bounded.
+    const html = (await res.text()).slice(0, 60_000);
 
     // Match both attribute orders: property="og:image" content="..." and vice versa
     const match =

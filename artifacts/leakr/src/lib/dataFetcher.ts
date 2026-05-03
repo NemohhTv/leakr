@@ -89,9 +89,16 @@ const NON_GAMING_TITLE_PATTERNS: RegExp[] = [
   /^(the )?(case for|case against)\b/i,
   /^(here['''`]?s )?why\b/i,
   /^let['''`]?s talk about\b/i,
-  /\bcould learn (lessons? )?from\b/i,
+  // "X could learn (a few/some/important/valuable) lessons from Y" — opinion framing
+  /\bcould learn\b.{0,30}\b(from|about)\b/i,
   /\b(has|have) a point\b/i,
   /\bin defen[cs]e of\b/i,
+  // "What X can learn from Y" — anchored at start to avoid factual matches like
+  // "AI anti-cheat can learn from player reports, study finds".
+  /^what\b.{0,40}\b(can|could|should|must|needs? to)\s+learn\b/i,
+  // "Lessons from X" / "What X taught us" — retrospectives, not news
+  /^lessons (from|of)\b/i,
+  /^what\b.{0,30}\btaught\s+(us|me)\b/i,
   // Opinion-style headlines: "Why X needs/should/matters" (modal verbs, not factual statements).
   // Excludes "Why X is delayed" / "Why X was cancelled" — those are factual reporting.
   /^why\b.{0,80}\b(needs|should|shouldn['''`]?t|matters|deserves|fails|failed|works)\b/i,
@@ -518,7 +525,7 @@ function applyCorroboration(items: IntelItem[]): IntelItem[] {
 
 // ── Cache helpers ─────────────────────────────────────────────────────────────
 const CACHE_TTL = 15 * 60 * 1000;
-const CACHE_VERSION = "v17";
+const CACHE_VERSION = "v18";
 
 async function fetchWithCache<T>(
   cacheKey: string,
