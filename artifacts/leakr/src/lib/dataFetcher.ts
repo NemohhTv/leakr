@@ -190,9 +190,19 @@ const NON_GAMING_TITLE_PATTERNS: RegExp[] = [
   /\b(tcg|ccg)\b/i,
   /\byu-?gi-?oh\b/i,
   /\bmagic[:\s]+the gathering\b/i,
+  /\bmtg\b/i,
   /\bmtg arena\b/i,
   /\bpok[eé]mon tcg\b/i,
   /\bcard pack(s)?\b.{0,15}\b(reveal|expansion)\b/i,
+  // Bare "Magic" co-occurring with MTG-specific roles/objects. Magic the franchise
+  // is consistently referenced with these words ("Magic artist", "Magic card",
+  // "Magic set", etc.) — none of which legitimately appear in video-game news.
+  /\bmagic\b.{0,40}\b(artist|illustrator|card|cards|deck|booster|expansion|set\s+release|commander|planeswalker|mana|tournament|pro\s+tour|arena|draft|sealed|prerelease)\b/i,
+  /\b(artist|illustrator|card|cards|deck|booster|expansion|commander|planeswalker|mana|tournament|pro\s+tour|draft|sealed|prerelease)\b.{0,40}\bmagic\b/i,
+  // Other physical/digital card-game franchises
+  /\b(disney lorcana|lorcana|flesh and blood|keyforge|netrunner|hearthstone\s+card|legends of runeterra)\b/i,
+  /\bcommander\s+(deck|format|league)\b/i,
+  /\bplaneswalker\b/i,
   // Speedrun / community events (typically not news)
   /\bgames done quick\b/i,
   /\bspeedrun(ning)?\b.{0,20}\b(record|world record)\b/i,
@@ -612,7 +622,7 @@ function applyCorroboration(items: IntelItem[]): IntelItem[] {
 
 // ── Cache helpers ─────────────────────────────────────────────────────────────
 const CACHE_TTL = 15 * 60 * 1000;
-const CACHE_VERSION = "v24";
+const CACHE_VERSION = "v25";
 
 async function fetchWithCache<T>(
   cacheKey: string,
