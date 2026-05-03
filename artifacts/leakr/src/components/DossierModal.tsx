@@ -70,16 +70,16 @@ export function DossierModal({ item, onClose }: DossierModalProps) {
 
           {/* Body */}
           <div className="overflow-y-auto flex-grow">
-            <div className="p-5 md:p-8 flex flex-col gap-8">
+            <div className="p-5 md:p-8 flex flex-col gap-6 md:gap-8">
 
               {/* Top: tier + gauge + title */}
-              <div className="flex flex-col sm:flex-row gap-6">
+              <div className="flex flex-col sm:flex-row gap-5 sm:gap-6">
 
-                {/* Gauge col */}
-                <div className="flex flex-row sm:flex-col items-center gap-5 shrink-0">
+                {/* Gauge col — horizontal on mobile, vertical on tablet+ */}
+                <div className="flex flex-row sm:flex-col items-center justify-between sm:justify-start gap-3 sm:gap-5 shrink-0">
                   <TierBadge tier={item.tier} size="lg" />
 
-                  <div className="relative w-20 h-20 flex items-center justify-center">
+                  <div className="relative w-16 h-16 sm:w-20 sm:h-20 flex items-center justify-center shrink-0">
                     <svg className="w-full h-full -rotate-90" viewBox="0 0 36 36">
                       <path
                         fill="none" stroke="#27272a" strokeWidth="3"
@@ -98,19 +98,19 @@ export function DossierModal({ item, onClose }: DossierModalProps) {
                       />
                     </svg>
                     <div className="absolute flex flex-col items-center">
-                      <span className="text-xl font-bold font-mono text-white">{item.plausibility}</span>
-                      <span className="text-[8px] uppercase tracking-widest text-zinc-600">Score</span>
+                      <span className="text-lg sm:text-xl font-bold font-mono text-white leading-none">{item.plausibility}</span>
+                      <span className="text-[8px] uppercase tracking-widest text-zinc-600 mt-0.5">Score</span>
                     </div>
                   </div>
 
-                  <div className="text-center sm:text-center">
+                  <div className="text-right sm:text-center min-w-0">
                     <div className="text-[9px] uppercase tracking-widest text-zinc-600">Classification</div>
-                    <div className="text-xs font-bold text-zinc-300 mt-0.5">{TIER_LABEL[item.tier]}</div>
+                    <div className="text-xs font-bold text-zinc-300 mt-0.5 whitespace-nowrap">{TIER_LABEL[item.tier]}</div>
                   </div>
                 </div>
 
                 {/* Title + meta col */}
-                <div className="flex flex-col gap-4 flex-grow min-w-0">
+                <div className="flex flex-col gap-3 sm:gap-4 flex-grow min-w-0">
                   <h1 className="text-xl md:text-2xl font-bold leading-tight text-white">
                     {item.title}
                   </h1>
@@ -177,13 +177,13 @@ export function DossierModal({ item, onClose }: DossierModalProps) {
             </div>
           </div>
 
-          {/* Footer */}
-          <div className="px-5 py-4 border-t border-zinc-800 bg-zinc-950 flex justify-end shrink-0">
+          {/* Footer — full-width button on mobile, right-aligned on tablet+ */}
+          <div className="px-5 py-4 border-t border-zinc-800 bg-zinc-950 flex sm:justify-end shrink-0">
             <a
               href={item.url}
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex items-center gap-2 px-5 py-2.5 bg-zinc-100 text-zinc-950 hover:bg-white font-bold uppercase tracking-wider text-xs rounded transition-colors"
+              className="inline-flex items-center justify-center gap-2 w-full sm:w-auto px-5 py-3 sm:py-2.5 bg-zinc-100 text-zinc-950 hover:bg-white font-bold uppercase tracking-wider text-xs rounded transition-colors"
             >
               Read Full Report <ExternalLink className="w-3.5 h-3.5" />
             </a>
