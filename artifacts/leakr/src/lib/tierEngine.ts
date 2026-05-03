@@ -44,6 +44,16 @@ const OFFICIAL_STATEMENT_KEYWORDS = [
   "explains", "clarifies", "opens up", "speaks out",
   "responds to", "comments on", "talks about", "defends",
   "criticizes", "weighs in", "stance on", "thoughts on",
+  "spoke about", "spoke on", "spoke with", "talked about",
+  "addressed", "said about", "shared thoughts",
+];
+
+// Job titles / roles indicating a named developer/executive is the source
+const DEVELOPER_ROLE_KEYWORDS = [
+  "director", "creative director", "game director", "lead designer",
+  "ceo", "president", "vice president", "head of", "studio head",
+  "producer", "developer", "designer", "co-founder", "founder",
+  "narrative director", "art director", "technical director",
 ];
 
 const STRONG_LEAK_PHRASES = [
@@ -181,6 +191,13 @@ export function analyzeTierAndPlausibility(
   if (isOfficialStatement) {
     score += 14;
     signals.push("Verified official statement");
+  }
+
+  // 3c. Named developer/executive making an official statement — highest confidence verified fact
+  const hasDevRole = DEVELOPER_ROLE_KEYWORDS.some(r => t.includes(r));
+  if (hasDevRole && isOfficialStatement) {
+    score += 12;
+    signals.push("Named developer statement");
   }
 
   // 4. Strong leak evidence phrases

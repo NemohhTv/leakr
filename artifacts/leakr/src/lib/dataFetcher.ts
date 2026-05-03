@@ -30,6 +30,16 @@ const NON_GAMING_TITLE_PATTERNS: RegExp[] = [
   /TV Show Review/i,
   /Episode Recap/i,
   /Season \d+ Episode/i,
+  // Podcast / audio content
+  /\bpodcast\b/i,
+  /\bepisode \d+\b/i,
+  /\bep\.?\s*\d+\b/i,
+  // Opinion / editorial pieces (not news)
+  /^opinion[:\s—–]/i,
+  /^editorial[:\s—–]/i,
+  /\bopinion piece\b/i,
+  /^(the )?(case for|case against)\b/i,
+  /^(here's why|let's talk about)\b/i,
   // Deals / commerce articles (not news)
   /\bbest deals?\b.{0,25}(today|this week|of the day)\b/i,
   /\bdeals (today|of the day|this week)\b/i,
@@ -201,7 +211,12 @@ function parseRSSFeed(
 }
 
 // ── Reddit Atom parser ────────────────────────────────────────────────────────
-function parseRedditAtom(xmlStr: string, source: IntelSource): IntelItem[] {
+// `serverThumbnails` maps Reddit thread URL → og:image fetched server-side from the linked article
+function parseRedditAtom(
+  xmlStr: string,
+  source: IntelSource,
+  serverThumbnails: Record<string, string> = {},
+): IntelItem[] {
   const parser = new DOMParser();
   const xml = parser.parseFromString(xmlStr, "application/xml");
   const entries = Array.from(xml.querySelectorAll("entry"));
@@ -247,15 +262,19 @@ function parseRedditAtom(xmlStr: string, source: IntelSource): IntelItem[] {
     if (wordCount <= 2 && !isLinkPost) continue;
 
     // Thumbnail priority:
-    // 1. media:thumbnail — Reddit's generated preview image (most reliable for link posts)
-    // 2. First <img> from content that's from Reddit's preview CDN (fallback for some link posts)
-    let thumbnail: string | null = null;
-    const mediaThumbnail = entry.getElementsByTagNameNS("*", "thumbnail")[0];
-    if (mediaThumbnail) {
-      const url = mediaThumbnail.getAttribute("url");
-      // Reddit provides "self", "default", "nsfw" as placeholder strings — ignore those
-      if (url && url.startsWith("http")) {
-        thumbnail = url;
+    // 1. Server-injected og:image from the linked article — permanent, high quality
+    // 2. media:thumbnail — Reddit's CDN preview (may expire after ~1hr for older posts)
+    // 3. First <img> from content HTML that's on Reddit's preview CDN
+    let thumbnail: string | null = serverThumbnails[redditThreadUrl] ?? null;
+
+    if (!thumbnail) {
+      const mediaThumbnail = entry.getElementsByTagNameNS("*", "thumbnail")[0];
+      if (mediaThumbnail) {
+        const url = mediaThumbnail.getAttribute("url");
+        // Reddit provides "self", "default", "nsfw" as placeholder strings — ignore those
+        if (url && url.startsWith("http")) {
+          thumbnail = url;
+        }
       }
     }
 
@@ -335,7 +354,7 @@ function applyCorroboration(items: IntelItem[]): IntelItem[] {
 
 // ── Cache helpers ─────────────────────────────────────────────────────────────
 const CACHE_TTL = 15 * 60 * 1000;
-const CACHE_VERSION = "v7";
+const CACHE_VERSION = "v11";
 
 async function fetchWithCache<T>(
   cacheKey: string,
@@ -380,21 +399,25 @@ export async function fetchFeedData(): Promise<IntelItem[]> {
     {
       key: "leakr_cache_reddit",
       fetcher: () =>
-        fetch("/api/feed/reddit?limit=25")
-          .then(r => { if (!r.ok) throw new Error("reddit " + r.status); return r.text(); })
-          .then(xml => parseRedditAtom(xml, "reddit")),
+        fetch("/api/feed/reddit-enriched?limit=25", { cache: "no-store" })
+          .then(r => { if (!r.ok) throw new Error("reddit " + r.status); return r.json(); })
+          .then(({ xml, thumbnails }: { xml: string; thumbnails: Record<string, string> }) =>
+            parseRedditAtom(xml, "reddit", thumbnails),
+          ),
     },
     {
       key: "leakr_cache_gamingnews",
       fetcher: () =>
-        fetch("/api/feed/gamingnews?limit=25")
-          .then(r => { if (!r.ok) throw new Error("gamingnews " + r.status); return r.text(); })
-          .then(xml => parseRedditAtom(xml, "gamingnews")),
+        fetch("/api/feed/gamingnews-enriched?limit=25", { cache: "no-store" })
+          .then(r => { if (!r.ok) throw new Error("gamingnews " + r.status); return r.json(); })
+          .then(({ xml, thumbnails }: { xml: string; thumbnails: Record<string, string> }) =>
+            parseRedditAtom(xml, "gamingnews", thumbnails),
+          ),
     },
     {
       key: "leakr_cache_ign",
       fetcher: () =>
-        fetch("/api/feed/ign")
+        fetch("/api/feed/ign", { cache: "no-store" })
           .then(r => { if (!r.ok) throw new Error("ign " + r.status); return r.text(); })
           .then(xml => parseRSSFeed(xml, "ign")),
     },

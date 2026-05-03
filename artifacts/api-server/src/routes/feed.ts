@@ -2,65 +2,145 @@ import { Router } from "express";
 
 const router = Router();
 
-// ── Reddit: r/GamingLeaksAndRumours ──────────────────────────────────────────
-router.get("/feed/reddit", async (req, res) => {
-  try {
-    const limit = Math.min(Number(req.query["limit"]) || 25, 50);
-    const response = await fetch(
-      `https://www.reddit.com/r/GamingLeaksAndRumours/top.rss?limit=${limit}&t=day`,
-      {
-        headers: {
-          "User-Agent": "Mozilla/5.0 (compatible; Leakr/1.0; +https://leakr.gg)",
-          Accept: "application/rss+xml, application/xml, text/xml, */*",
-        },
-        signal: AbortSignal.timeout(10000),
-      },
-    );
+// ── Reddit Atom helpers ───────────────────────────────────────────────────────
 
-    if (!response.ok) {
-      req.log.error({ status: response.status }, "Reddit RSS fetch failed");
-      res.status(response.status).json({ error: "Failed to fetch Reddit feed" });
-      return;
+function unescapeHtmlEntities(str: string): string {
+  return str
+    .replace(/&quot;/g, '"')
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&#32;/g, " ")
+    .replace(/&#39;/g, "'");
+}
+
+// Domains that are unlikely to have useful og:images for article thumbnails
+const SKIP_THUMBNAIL_DOMAINS = [
+  "xcancel.com", "twitter.com", "x.com",
+  "imgur.com", "ibb.co", "i.redd.it", "preview.redd.it",
+  "old.reddit.com", "www.reddit.com", "redd.it",
+];
+
+function isSkippableThumbnailDomain(url: string): boolean {
+  return SKIP_THUMBNAIL_DOMAINS.some(d => url.includes(d));
+}
+
+// Extract YouTube video ID from common URL formats
+function extractYouTubeVideoId(url: string): string | null {
+  const m = url.match(
+    /(?:youtu\.be\/|youtube\.com\/(?:watch\?v=|live\/|embed\/|shorts\/))([A-Za-z0-9_-]{11})/,
+  );
+  return m?.[1] ?? null;
+}
+
+// Parse Reddit Atom XML server-side: returns a map of redditThreadUrl → best source URL for thumbnail
+function extractRedditExternalLinks(atomXml: string): Map<string, string> {
+  const map = new Map<string, string>();
+  const entryMatches = [...atomXml.matchAll(/<entry>([\s\S]*?)<\/entry>/g)];
+
+  for (const [, entryXml] of entryMatches) {
+    const threadUrl = entryXml.match(/<link[^>]+href="([^"]+)"/)?.[1];
+    if (!threadUrl || !threadUrl.includes("reddit.com")) continue;
+
+    const contentEncoded = entryXml.match(/<content[^>]*>([\s\S]*?)<\/content>/)?.[1];
+    if (!contentEncoded) continue;
+
+    const contentHtml = unescapeHtmlEntities(contentEncoded);
+
+    // 1. Link post: dedicated [link] anchor pointing to the source article
+    const linkAnchorMatch = contentHtml.match(
+      /href="(https?:\/\/(?!(?:www\.)?reddit\.com|(?:\w+\.)?redd\.it)[^"]+)"[^>]*>\[link\]/,
+    );
+    if (linkAnchorMatch?.[1] && !isSkippableThumbnailDomain(linkAnchorMatch[1])) {
+      map.set(threadUrl, linkAnchorMatch[1]);
+      continue;
     }
 
-    const xml = await response.text();
-    res.setHeader("Content-Type", "application/xml");
+    // 2. Self-post: scan body for first useful external link (YouTube, news articles, etc.)
+    const allHrefs = [...contentHtml.matchAll(/href="(https?:\/\/[^"]+)"/g)].map(m => m[1]);
+    const firstUseful = allHrefs.find(h => {
+      if (h.includes("reddit.com") || h.includes("redd.it")) return false;
+      if (isSkippableThumbnailDomain(h)) return false;
+      return true;
+    });
+    if (firstUseful) {
+      map.set(threadUrl, firstUseful);
+    }
+  }
+
+  return map;
+}
+
+// Get the best available thumbnail for an article URL:
+// - YouTube → direct CDN thumbnail (no API key needed, always works)
+//   Uses hqdefault (480x360) which is reliably available for all videos.
+//   maxresdefault only exists for HD videos and returns 404 otherwise.
+// - Everything else → fetch og:image from the page
+async function getArticleThumbnail(url: string): Promise<string | null> {
+  const ytId = extractYouTubeVideoId(url);
+  if (ytId) {
+    return `https://img.youtube.com/vi/${ytId}/hqdefault.jpg`;
+  }
+  return fetchOgImage(url).catch(() => null);
+}
+
+async function buildRedditEnrichedResponse(
+  subredditUrl: string,
+): Promise<{ xml: string; thumbnails: Record<string, string> }> {
+  const response = await fetch(subredditUrl, {
+    headers: {
+      "User-Agent": "Mozilla/5.0 (compatible; Leakr/1.0; +https://leakr.gg)",
+      Accept: "application/atom+xml, application/xml, text/xml, */*",
+    },
+    signal: AbortSignal.timeout(10000),
+  });
+
+  if (!response.ok) throw new Error(`Reddit fetch failed: ${response.status}`);
+
+  const xml = await response.text();
+  const linkMap = extractRedditExternalLinks(xml);
+
+  const entries = [...linkMap.entries()];
+  const images = await Promise.all(entries.map(([, extUrl]) => getArticleThumbnail(extUrl)));
+
+  const thumbnails: Record<string, string> = {};
+  entries.forEach(([threadUrl], i) => {
+    const img = images[i];
+    if (img) thumbnails[threadUrl] = img;
+  });
+
+  return { xml, thumbnails };
+}
+
+// ── Reddit: r/GamingLeaksAndRumours (enriched JSON) ──────────────────────────
+router.get("/feed/reddit-enriched", async (req, res) => {
+  try {
+    const limit = Math.min(Number(req.query["limit"]) || 25, 50);
+    const data = await buildRedditEnrichedResponse(
+      `https://www.reddit.com/r/GamingLeaksAndRumours/top.rss?limit=${limit}&t=day`,
+    );
+    res.setHeader("Content-Type", "application/json");
     res.setHeader("Cache-Control", "public, max-age=900");
-    res.send(xml);
+    res.json(data);
   } catch (err) {
-    req.log.error({ err }, "Reddit feed fetch failed");
-    res.status(500).json({ error: "Failed to fetch Reddit feed" });
+    req.log.error({ err }, "Reddit enriched feed failed");
+    res.status(500).json({ error: "Failed to fetch Reddit enriched feed" });
   }
 });
 
-// ── Reddit: r/gamingnews ─────────────────────────────────────────────────────
-router.get("/feed/gamingnews", async (req, res) => {
+// ── Reddit: r/gamingnews (enriched JSON) ─────────────────────────────────────
+router.get("/feed/gamingnews-enriched", async (req, res) => {
   try {
     const limit = Math.min(Number(req.query["limit"]) || 25, 50);
-    const response = await fetch(
+    const data = await buildRedditEnrichedResponse(
       `https://www.reddit.com/r/gamingnews/top.rss?limit=${limit}&t=day`,
-      {
-        headers: {
-          "User-Agent": "Mozilla/5.0 (compatible; Leakr/1.0; +https://leakr.gg)",
-          Accept: "application/rss+xml, application/xml, text/xml, */*",
-        },
-        signal: AbortSignal.timeout(10000),
-      },
     );
-
-    if (!response.ok) {
-      req.log.error({ status: response.status }, "r/gamingnews RSS fetch failed");
-      res.status(response.status).json({ error: "Failed to fetch gamingnews feed" });
-      return;
-    }
-
-    const xml = await response.text();
-    res.setHeader("Content-Type", "application/xml");
+    res.setHeader("Content-Type", "application/json");
     res.setHeader("Cache-Control", "public, max-age=900");
-    res.send(xml);
+    res.json(data);
   } catch (err) {
-    req.log.error({ err }, "r/gamingnews feed fetch failed");
-    res.status(500).json({ error: "Failed to fetch gamingnews feed" });
+    req.log.error({ err }, "GamingNews enriched feed failed");
+    res.status(500).json({ error: "Failed to fetch GamingNews enriched feed" });
   }
 });
 
