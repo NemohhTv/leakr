@@ -449,6 +449,42 @@ router.get("/rawg/image", async (req, res) => {
   // title itself (e.g. "[The Witcher 4] new trailer" must NOT be stripped).
   const debracketed = rawQuery.replace(/^\s*\[[^\]]{1,200}\]\s*:\s*/, "");
 
+  // Shorthand → canonical alias expansion. Many headlines use abbreviations that RAWG's
+  // search doesn't index (e.g. "GTA 6", "CoD", "RDR2"). Without expansion these queries
+  // fall through every search tier and return no image. Aliases are added as ADDITIONAL
+  // query candidates — the original scrubbed query is still tried first.
+  const TITLE_ALIASES: Array<{ pattern: RegExp; expanded: string }> = [
+    { pattern: /\bgta\s*(6|vi)\b/i,        expanded: "grand theft auto" },
+    { pattern: /\bgta\s*(5|v)\b/i,         expanded: "grand theft auto v" },
+    { pattern: /\bgta\s*(4|iv)\b/i,        expanded: "grand theft auto iv" },
+    { pattern: /\brdr\s*2\b/i,             expanded: "red dead redemption 2" },
+    { pattern: /\brdr\b/i,                 expanded: "red dead redemption" },
+    { pattern: /\bcod\b/i,                 expanded: "call of duty" },
+    { pattern: /\bmw\s*[23]\b/i,           expanded: "call of duty modern warfare" },
+    { pattern: /\bbf\s*\d+\b/i,            expanded: "battlefield" },
+    { pattern: /\bff\s*(7|vii)\b/i,        expanded: "final fantasy vii" },
+    { pattern: /\bff\s*(14|xiv)\b/i,       expanded: "final fantasy xiv" },
+    { pattern: /\bff\s*(16|xvi)\b/i,       expanded: "final fantasy xvi" },
+    { pattern: /\bdmc\s*\d*\b/i,           expanded: "devil may cry" },
+    { pattern: /\bre\s*[24578]\b/i,        expanded: "resident evil" },
+    { pattern: /\btes\s*(6|vi)\b/i,        expanded: "elder scrolls" },
+    { pattern: /\bes\s*(6|vi)\b/i,         expanded: "elder scrolls" },
+    { pattern: /\bskyrim\b/i,              expanded: "elder scrolls v skyrim" },
+    { pattern: /\bbotw\b/i,                expanded: "zelda breath of the wild" },
+    { pattern: /\btotk\b/i,                expanded: "zelda tears of the kingdom" },
+    { pattern: /\bow\s*2\b/i,              expanded: "overwatch 2" },
+    { pattern: /\bcs\s*(2|go)\b/i,         expanded: "counter-strike" },
+    { pattern: /\btf\s*2\b/i,              expanded: "team fortress 2" },
+    { pattern: /\bl4d\s*2?\b/i,            expanded: "left 4 dead" },
+    { pattern: /\bdbd\b/i,                 expanded: "dead by daylight" },
+    { pattern: /\bpoe\b/i,                 expanded: "path of exile" },
+    { pattern: /\bwow\b/i,                 expanded: "world of warcraft" },
+    { pattern: /\bff\s*16\b/i,             expanded: "final fantasy xvi" },
+  ];
+  const aliasExpansions = TITLE_ALIASES
+    .filter(a => a.pattern.test(rawQuery))
+    .map(a => a.expanded);
+
   // Aggressive scrub to isolate game name
   const scrubbed = debracketed
     // Remove developer-attribution phrases common in Reddit bracket-style posts
@@ -519,11 +555,25 @@ router.get("/rawg/image", async (req, res) => {
       .filter(w => w.length > 2 && !STOP_WORDS.has(w)),
   );
 
+  // Build a query-words set from any string. Used to compute relevance against either
+  // the original scrubbed query OR an alias/fallback query (so alias-expanded searches
+  // don't get rejected for not sharing words with the original noisy headline).
+  function buildQueryWords(text: string): Set<string> {
+    return new Set(
+      normalizeWord(text)
+        .split(/\s+/)
+        .filter(w => w.length > 2 && !STOP_WORDS.has(w)),
+    );
+  }
+
   // Require a game result to share enough key words with the query.
   // For multi-word queries (2+ key words), need 2 matching words to prevent
   // "Black Desert Online" matching a search for "Crimson Desert".
-  function isRelevant(gameName: string): boolean {
-    if (queryWords.size === 0) return false;
+  // Pass `queryWordsOverride` for alias / fallback paths where relevance should be
+  // computed against the alternate query, not the original headline.
+  function isRelevant(gameName: string, queryWordsOverride?: Set<string>): boolean {
+    const qw = queryWordsOverride ?? queryWords;
+    if (qw.size === 0) return false;
     const gameWords = new Set(
       normalizeWord(gameName)
         .replace(/[^a-z0-9\s]/g, " ")
@@ -531,26 +581,29 @@ router.get("/rawg/image", async (req, res) => {
         .filter(w => w.length > 2),
     );
     let matchCount = 0;
-    for (const w of queryWords) {
+    for (const w of qw) {
       if (gameWords.has(w)) matchCount++;
     }
     // If every word of the game name appears in the query it's a definite match
-    if (gameWords.size > 0 && [...gameWords].every(w => queryWords.has(w))) return true;
+    if (gameWords.size > 0 && [...gameWords].every(w => qw.has(w))) return true;
     // Short game names (1 word) only need 1 match — handles "[Dev]: game info" style titles
-    const required = (queryWords.size >= 2 && gameWords.size >= 2) ? 2 : 1;
+    const required = (qw.size >= 2 && gameWords.size >= 2) ? 2 : 1;
     return matchCount >= required;
   }
 
-  // Strategy: try full scrubbed query then first 4 words — but never drop below 3 meaningful words
+  // Strategy: try full scrubbed query then first 4 words — but never drop below 3 meaningful words.
+  // Alias expansions (e.g. "GTA 6" → "grand theft auto") are tried alongside; relevance for
+  // those candidates is checked against the alias words, not the original noisy headline.
   const words = scrubbed.split(" ").filter(w => w.length > 0);
-  const queries = [
-    scrubbed,
-    words.length > 4 ? words.slice(0, 4).join(" ") : null,
-  ].filter((q): q is string => q !== null && q.trim().length >= 3);
+  const queries: Array<{ q: string; relevanceWords?: Set<string> }> = [
+    { q: scrubbed },
+    words.length > 4 ? { q: words.slice(0, 4).join(" ") } : null,
+    ...aliasExpansions.map(a => ({ q: a, relevanceWords: buildQueryWords(a) })),
+  ].filter((q): q is { q: string; relevanceWords?: Set<string> } => q !== null && q.q.trim().length >= 3);
 
     let bestResult: { background_image: string; name: string; slug: string; ratings_count?: number } | null = null;
 
-    for (const query of queries) {
+    for (const { q: query, relevanceWords } of queries) {
       const url = new URL("https://api.rawg.io/api/games");
       url.searchParams.set("key", apiKey);
       url.searchParams.set("search", query);
@@ -587,7 +640,7 @@ router.get("/rawg/image", async (req, res) => {
           r.background_image &&
           !r.background_image.includes("media/screenshots") &&
           r.name &&
-          isRelevant(r.name),
+          isRelevant(r.name, relevanceWords),
       );
 
       if (candidates.length > 0) {
@@ -621,7 +674,7 @@ router.get("/rawg/image", async (req, res) => {
     // to hand-maintain a list of every game/franchise in existence.
     if (!bestResult) {
       const allWords = scrubbed.split(/\s+/).filter(w => w.length > 0);
-      const alreadyTried = new Set(queries.map(q => q.toLowerCase()));
+      const alreadyTried = new Set(queries.map(({ q }) => q.toLowerCase()));
       const STOP_PHRASE_WORDS = new Set([...STOP_WORDS, "his", "her", "him", "she", "have", "had", "who", "what", "when", "where", "why", "how"]);
       const phrases: string[] = [];
       // Longer windows are more specific — try 4-word, then 3-word, then 2-word.
@@ -688,6 +741,95 @@ router.get("/rawg/image", async (req, res) => {
               slug: phraseBest.slug!,
               ratings_count: phraseBest.ratings_count,
             };
+          }
+        }
+      }
+    }
+
+    // ── Single-content-word last-resort fallback ─────────────────────────────
+    // When n-gram search yields nothing, try each individual significant word from the
+    // scrubbed query. This handles cases like "Alien Survival in PS Store?" where neither
+    // the full title nor any 2+ word window matches a real game, but the single word "alien"
+    // matches Alien: Isolation. Still gated by isRelevant + ratings_count > 100 so we won't
+    // false-match noise. Words that are platforms/stores/generic are skipped.
+    if (!bestResult) {
+      const SINGLE_WORD_SKIP = new Set([
+        "ps", "ps4", "ps5", "psp", "ps2", "ps3", "vita", "psn", "store",
+        "xbox", "xbla", "xsx", "xbsx", "switch", "wii", "ds", "3ds",
+        "pc", "mac", "ios", "android", "epic", "steam", "deck", "gog",
+        "nintendo", "sony", "microsoft", "valve", "ubisoft", "ea", "activision", "blizzard",
+        "rumor", "leaked", "leak", "trailer", "gameplay", "review", "preview",
+        "today", "tomorrow", "yesterday", "week", "month", "year",
+        "release", "released", "launch", "launched", "coming", "now",
+        "best", "worst", "top", "list", "guide",
+        "more", "less", "very", "much", "just", "only", "also", "still", "even",
+        // High-noise content words that frequently appear in headlines but are not
+        // game titles on their own (would false-match too easily on RAWG).
+        "survival", "edition", "remake", "remaster", "remastered", "version",
+        "update", "updated", "patch", "season", "episode", "chapter",
+        "console", "platform", "exclusive", "title", "titles", "game", "games",
+        "studio", "studios", "developer", "developers", "devs", "publisher",
+        "trailer", "teaser", "footage", "screenshot", "screenshots",
+        "deluxe", "premium", "complete", "definitive", "ultimate", "collection",
+        "next", "latest", "upcoming", "anniversary", "early", "access",
+      ]);
+      // Tokenize the same way game names are tokenized (strip punctuation, collapse
+      // whitespace) so words like "Alien:" become "alien" and actually match candidates.
+      const singleWords = Array.from(new Set(
+        normalizeWord(scrubbed)
+          .replace(/[^a-z0-9\s]/g, " ")
+          .split(/\s+/)
+          .filter(w => w.length >= 4 && !SINGLE_WORD_SKIP.has(w)),
+      )).sort((a, b) => b.length - a.length);
+      const SINGLE_WORD_BUDGET = 4;
+      const singleWordTries = singleWords.slice(0, SINGLE_WORD_BUDGET);
+      if (singleWordTries.length > 0) {
+        req.log.info({ rawQuery, singleWordTries }, "RAWG single-word last-resort search");
+        for (const word of singleWordTries) {
+          try {
+            const swUrl = new URL("https://api.rawg.io/api/games");
+            swUrl.searchParams.set("key", apiKey);
+            swUrl.searchParams.set("search", word);
+            swUrl.searchParams.set("page_size", "10");
+            swUrl.searchParams.set("search_exact", "false");
+            const swResp = await fetch(swUrl.toString(), {
+              headers: { "User-Agent": "Leakr/1.0" },
+              signal: AbortSignal.timeout(6000),
+            });
+            if (!swResp.ok) continue;
+            const swData = (await swResp.json()) as {
+              results?: Array<{ background_image?: string; name?: string; slug?: string; ratings_count?: number }>;
+            };
+            // For single-word fallback, relevance is satisfied by the search word literally
+            // appearing in the game name. RAWG's fuzzy search can return loosely related
+            // results otherwise (e.g. "alien" returning "Allies").
+            const normalizedWord = normalizeWord(word);
+            const swCandidates = (swData.results ?? []).filter(r => {
+              if (!r.background_image || r.background_image.includes("media/screenshots")) return false;
+              if (!r.name || !r.slug) return false;
+              const nameWords = normalizeWord(r.name)
+                .replace(/[^a-z0-9\s]/g, " ")
+                .split(/\s+/)
+                .filter(w => w.length > 0);
+              return nameWords.includes(normalizedWord);
+            });
+            if (swCandidates.length === 0) continue;
+            const swBest = swCandidates.reduce((a, b) =>
+              (b.ratings_count ?? 0) > (a.ratings_count ?? 0) ? b : a,
+            );
+            // Higher rating floor for single-word searches to avoid obscure matches —
+            // single-word relevance is weaker so we lean on community traction.
+            if ((swBest.ratings_count ?? 0) > 100) {
+              bestResult = {
+                background_image: swBest.background_image!,
+                name: swBest.name!,
+                slug: swBest.slug!,
+                ratings_count: swBest.ratings_count,
+              };
+              break;
+            }
+          } catch {
+            // Network/timeout — try next word
           }
         }
       }
