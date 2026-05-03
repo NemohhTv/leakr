@@ -38,6 +38,14 @@ const CONFIRMED_NEWS_KEYWORDS = [
   "launches", "release date", "announced",
 ];
 
+// Verified official statements — an attributed quote/explanation from a named person/company
+// These are confirmed facts, not rumors; should yield A-tier when from credible outlets
+const OFFICIAL_STATEMENT_KEYWORDS = [
+  "explains", "clarifies", "opens up", "speaks out",
+  "responds to", "comments on", "talks about", "defends",
+  "criticizes", "weighs in", "stance on", "thoughts on",
+];
+
 const STRONG_LEAK_PHRASES = [
   "datamined", "datamine", "files found", "code strings",
   "source code", "achievement list", "trophy list", "rating board",
@@ -114,9 +122,22 @@ export function analyzeTierAndPlausibility(
     hasConfirmedNewsKeyword &&
     (source === "vgc" || source === "insider" || source === "ign");
 
+  // Verified official statement — named person/company giving attributed quote or explanation
+  // Only from credible outlets; these are factual, not rumors → A-tier
+  const isOfficialStatement =
+    !isConfirmedFromCredible &&
+    !isOfficialConfirmed &&
+    countMatches(t, OFFICIAL_STATEMENT_KEYWORDS) > 0 &&
+    (source === "vgc" || source === "insider" || source === "ign");
+
   if (isOfficialConfirmed || isConfirmedFromCredible) {
     tier = "S";
-  } else if (countMatches(t, STRONG_LEAK_PHRASES) > 0 || t.includes("leaked") || t.includes("leak")) {
+  } else if (
+    isOfficialStatement ||
+    countMatches(t, STRONG_LEAK_PHRASES) > 0 ||
+    t.includes("leaked") ||
+    t.includes("leak")
+  ) {
     tier = "A";
   } else if (
     countMatches(t, RUMOUR_PHRASES) > 0 ||
@@ -154,6 +175,12 @@ export function analyzeTierAndPlausibility(
   if (isConfirmedFromCredible) {
     score += 20;
     signals.push("Confirmed gaming news");
+  }
+
+  // 3b. Official attributed statement from named person/company via credible outlet
+  if (isOfficialStatement) {
+    score += 14;
+    signals.push("Verified official statement");
   }
 
   // 4. Strong leak evidence phrases

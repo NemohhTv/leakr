@@ -30,6 +30,20 @@ const NON_GAMING_TITLE_PATTERNS: RegExp[] = [
   /TV Show Review/i,
   /Episode Recap/i,
   /Season \d+ Episode/i,
+  // Deals / commerce articles (not news)
+  /\bbest deals?\b.{0,25}(today|this week|of the day)\b/i,
+  /\bdeals (today|of the day|this week)\b/i,
+  /today['''`]?s (best )?deals\b/i,
+  /\bgame deals? (today|this week|of the day)\b/i,
+  /\bcheapest games?\b/i,
+  // Movie / film content that isn't about the game itself
+  /\bmario (movie|film)\b/i,
+  /\bsonic (movie|film)\b/i,
+  /\bpokemon (movie|film)\b/i,
+  /\bin \w+ movies?\b/i,
+  /\bfilm adaptation\b/i,
+  /\bmovie (sequel|casting|script|premiere|box office)\b/i,
+  /\b(mario|zelda|sonic|pokemon|kirby)\s+movie\b/i,
 ];
 
 const NON_GAMING_CATEGORIES = new Set([
@@ -199,7 +213,7 @@ function parseRedditAtom(xmlStr: string, source: IntelSource): IntelItem[] {
 
     if (isNonGamingItem(title, [])) continue;
 
-    const link =
+    const redditThreadUrl =
       entry.querySelector("link")?.getAttribute("href") ||
       entry.querySelector("link")?.textContent ||
       "";
@@ -212,8 +226,29 @@ function parseRedditAtom(xmlStr: string, source: IntelSource): IntelItem[] {
     const tempDiv = document.createElement("div");
     tempDiv.innerHTML = content;
 
-    // For Reddit: only use media:thumbnail (provided by Reddit for image posts).
-    // Do NOT extract images from post HTML — those are user-submitted memes, not game art.
+    // Extract external article URL from the [link] anchor (link posts only)
+    // This is the actual news article the Reddit post links to
+    const allAnchors = Array.from(tempDiv.querySelectorAll("a[href]"));
+    const externalAnchor = allAnchors.find(a => {
+      const href = a.getAttribute("href") || "";
+      return (
+        href.startsWith("http") &&
+        !href.includes("reddit.com") &&
+        !href.includes("redd.it") &&
+        a.textContent?.trim() === "[link]"
+      );
+    });
+    const articleUrl = externalAnchor?.getAttribute("href") || redditThreadUrl;
+    const isLinkPost = articleUrl !== redditThreadUrl;
+
+    // Filter: posts with ≤ 2 words in title that have no external article link
+    // (e.g. bare game-name megathread posts like "Hogwarts Legacy" with no context)
+    const wordCount = title.split(/\s+/).filter(w => w.length > 0).length;
+    if (wordCount <= 2 && !isLinkPost) continue;
+
+    // Thumbnail priority:
+    // 1. media:thumbnail — Reddit's generated preview image (most reliable for link posts)
+    // 2. First <img> from content that's from Reddit's preview CDN (fallback for some link posts)
     let thumbnail: string | null = null;
     const mediaThumbnail = entry.getElementsByTagNameNS("*", "thumbnail")[0];
     if (mediaThumbnail) {
@@ -224,6 +259,23 @@ function parseRedditAtom(xmlStr: string, source: IntelSource): IntelItem[] {
       }
     }
 
+    // Fallback: preview image from content HTML (Reddit CDN only — avoids user memes)
+    if (!thumbnail) {
+      const imgs = Array.from(tempDiv.querySelectorAll("img[src]"));
+      for (const img of imgs) {
+        const src = img.getAttribute("src") || "";
+        if (
+          src.startsWith("http") &&
+          (src.includes("external-preview.redd.it") ||
+            src.includes("preview.redd.it") ||
+            src.includes("i.redd.it"))
+        ) {
+          thumbnail = src;
+          break;
+        }
+      }
+    }
+
     const description = (tempDiv.textContent || "").substring(0, 300).trim();
     const { tier, plausibility, signals } = analyzeTierAndPlausibility(title, source, description);
 
@@ -231,7 +283,7 @@ function parseRedditAtom(xmlStr: string, source: IntelSource): IntelItem[] {
       id: hashString(title + source),
       title,
       source,
-      url: link,
+      url: articleUrl, // Link posts point directly to the source article
       thumbnail,
       publishedAt: new Date(publishedStr),
       score: 0,
@@ -283,7 +335,7 @@ function applyCorroboration(items: IntelItem[]): IntelItem[] {
 
 // ── Cache helpers ─────────────────────────────────────────────────────────────
 const CACHE_TTL = 15 * 60 * 1000;
-const CACHE_VERSION = "v6";
+const CACHE_VERSION = "v7";
 
 async function fetchWithCache<T>(
   cacheKey: string,
