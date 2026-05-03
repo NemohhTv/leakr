@@ -1,0 +1,14 @@
+{
+  "buildCommand": "pnpm install && pnpm run typecheck:libs && NODE_ENV=production BASE_PATH=/ PORT=3000 pnpm --filter @workspace/leakr run build",
+  "outputDirectory": "artifacts/leakr/dist/public",
+  "functions": {
+    "api/index.ts": {
+      "memory": 1024,
+      "maxDuration": 30
+    }
+  },
+  "rewrites": [
+    { "source": "/api/(.*)", "destination": "/api" },
+    { "source": "/(.*)", "destination": "/index.html" }
+  ]
+}
