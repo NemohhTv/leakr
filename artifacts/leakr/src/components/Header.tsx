@@ -48,7 +48,12 @@ export function Header({
         <div className="flex items-center justify-between h-16">
           <button
             type="button"
-            onClick={() => { clearSourceFilters(); clearTierFilters(); setViewMode("grid"); }}
+            onClick={() => {
+              clearSourceFilters();
+              clearTierFilters();
+              setViewMode("grid");
+              window.scrollTo({ top: 0, behavior: "smooth" });
+            }}
             className="flex items-center gap-2 sm:gap-3 group focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 rounded min-w-0"
             aria-label="Reset filters, return to grid view, and show all reports"
             data-testid="logo-reset-filters"
