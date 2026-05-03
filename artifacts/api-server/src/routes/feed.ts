@@ -267,7 +267,10 @@ async function fetchOgImage(articleUrl: string): Promise<string | null> {
 // ── RSS: Insider Gaming (enriched JSON with og:images) ────────────────────────
 router.get("/feed/insider-enriched", async (req, res) => {
   try {
-    const response = await fetch("https://insider-gaming.com/feed/", {
+    // Use the News category feed only — the site-wide feed includes esports,
+    // LEGO physical merch, opinion lists ("ranked worst to best"), and lifestyle
+    // posts that violate Leakr's content policy.
+    const response = await fetch("https://insider-gaming.com/category/news/feed/", {
       headers: {
         "User-Agent": "Leakr/1.0 News Aggregator",
         Accept: "application/rss+xml, application/xml, text/xml",
@@ -461,6 +464,13 @@ router.get("/rawg/image", async (req, res) => {
     { pattern: /\brdr\b/i,                 expanded: "red dead redemption" },
     { pattern: /\bcod\b/i,                 expanded: "call of duty" },
     { pattern: /\bmw\s*[23]\b/i,           expanded: "call of duty modern warfare" },
+    // Numbered Modern Warfare entries (incl. unreleased MW4): RAWG doesn't index
+    // unreleased titles, but the franchise prefix lets us land on a representative
+    // game in the series so the post still gets a thumbnail.
+    { pattern: /\bmodern\s*warfare\s*\d+\b/i, expanded: "call of duty modern warfare" },
+    { pattern: /\bmodern\s*warfare\b/i,    expanded: "call of duty modern warfare" },
+    { pattern: /\bblack\s*ops\s*\d+\b/i,   expanded: "call of duty black ops" },
+    { pattern: /\bblack\s*ops\b/i,         expanded: "call of duty black ops" },
     { pattern: /\bbf\s*\d+\b/i,            expanded: "battlefield" },
     { pattern: /\bff\s*(7|vii)\b/i,        expanded: "final fantasy vii" },
     { pattern: /\bff\s*(14|xiv)\b/i,       expanded: "final fantasy xiv" },

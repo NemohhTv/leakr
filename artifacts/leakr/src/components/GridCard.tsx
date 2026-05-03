@@ -4,6 +4,7 @@ import { PlausibilityBar } from "./PlausibilityBar";
 import { useLazyImage } from "@/lib/imageResolver";
 import { timeAgo } from "@/lib/utils";
 import { sourceLabel } from "@/lib/sourceLabels";
+import { PlaceholderArtwork } from "./PlaceholderArtwork";
 import { ShieldAlert, ArrowUpRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -38,18 +39,7 @@ export function GridCard({ item, onOpenDossier }: GridCardProps) {
         {isLoading ? (
           <div className="absolute inset-0 shimmer" />
         ) : isError || !imgSrc ? (
-          <div className="absolute inset-0 overflow-hidden">
-            <div className="absolute inset-0 bg-gradient-to-br from-zinc-900 via-zinc-800/50 to-black" />
-            <div
-              className="absolute inset-0 opacity-[0.045]"
-              style={{
-                backgroundImage:
-                  "linear-gradient(rgba(255,255,255,0.6) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.6) 1px, transparent 1px)",
-                backgroundSize: "28px 28px",
-              }}
-            />
-            <div className="absolute bottom-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-primary/50 to-transparent" />
-          </div>
+          <PlaceholderArtwork title={item.title} source={item.source} variant="card" />
         ) : (
           <img 
             src={imgSrc} 

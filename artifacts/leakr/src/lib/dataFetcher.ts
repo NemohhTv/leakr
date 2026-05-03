@@ -612,7 +612,7 @@ function applyCorroboration(items: IntelItem[]): IntelItem[] {
 
 // ── Cache helpers ─────────────────────────────────────────────────────────────
 const CACHE_TTL = 15 * 60 * 1000;
-const CACHE_VERSION = "v23";
+const CACHE_VERSION = "v24";
 
 async function fetchWithCache<T>(
   cacheKey: string,
