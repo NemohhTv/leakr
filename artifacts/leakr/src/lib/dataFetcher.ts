@@ -108,6 +108,9 @@ const NON_GAMING_TITLE_PATTERNS: RegExp[] = [
   /\bunpopular opinion\b/i,
   /\b(deserves|deserved) (better|more|a)\b/i,
   /\bshould['''`]?ve\b/i,
+  // "Are X the True Heirs to Y" / "Is X the True Successor to Y" — comparative opinion framing
+  /\b(true|real|spiritual|rightful)\s+(heir|heirs|successor|successors|inheritor|inheritors)\s+(to|of)\b/i,
+  /^(is|are)\b.{0,80}\b(the\s+)?(true|real|spiritual|rightful)\s+(heir|heirs|successor|successors)\b/i,
   // Best of / list / ranking articles (not news)
   /\btop\s+\d+\b/i,
   /\b\d+\s+(best|worst|greatest)\b/i,
@@ -559,7 +562,7 @@ function applyCorroboration(items: IntelItem[]): IntelItem[] {
 
 // ── Cache helpers ─────────────────────────────────────────────────────────────
 const CACHE_TTL = 15 * 60 * 1000;
-const CACHE_VERSION = "v19";
+const CACHE_VERSION = "v20";
 
 async function fetchWithCache<T>(
   cacheKey: string,

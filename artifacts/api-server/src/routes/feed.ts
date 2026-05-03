@@ -24,6 +24,10 @@ const SKIP_THUMBNAIL_DOMAINS = [
   "instagram.com", "cdninstagram.com", "fbcdn.net",
   // TikTok CDNs similarly use signed URLs that expire quickly.
   "tiktok.com", "tiktokcdn.com",
+  // Cloudflare-protected sites that return 403 to server-side fetches regardless of
+  // User-Agent (TLS/JA3 fingerprinting). Skipping the og:image fetch lets the client
+  // fall back to RAWG instead of waiting for a guaranteed-failure round-trip.
+  "gamespot.com",
 ];
 
 function isSkippableThumbnailDomain(url: string): boolean {
@@ -367,11 +371,29 @@ router.get("/rawg/image", async (req, res) => {
     return;
   }
 
+  // Publisher / platform fallback: when a title only mentions a publisher or platform
+  // (e.g. "Gamespot: PlayStation spokesperson on DRM"), there's no specific game to look up.
+  // Map these to a flagship first-party title so we still return a representative cover.
+  const PUBLISHER_FALLBACKS: Array<{ pattern: RegExp; fallbackQuery: string }> = [
+    { pattern: /\b(playstation studios|playstation|sony interactive|sony)\b/i, fallbackQuery: "god of war" },
+    { pattern: /\b(xbox game studios|xbox|microsoft gaming|microsoft)\b/i, fallbackQuery: "halo infinite" },
+    { pattern: /\b(nintendo)\b/i, fallbackQuery: "zelda tears of the kingdom" },
+  ];
+  // Only apply the fallback when EXACTLY ONE publisher is mentioned. If a title mentions
+  // multiple ("Sony and Microsoft comment on..."), there's no single right flagship to pick,
+  // so we skip the fallback and let the normal search path decide.
+  const publisherMatches = PUBLISHER_FALLBACKS.filter(p => p.pattern.test(rawQuery));
+  const publisherFallback = publisherMatches.length === 1 ? publisherMatches[0]!.fallbackQuery : null;
+
   try {
-    // Significant words from the original query for relevance check
+    // Unicode-safe word normalizer: strips diacritics so "Pokémon" → "pokemon",
+  // "Final Fantasy XIV: Endwalker" → matches across diacritic-stripped variants.
+  const normalizeWord = (s: string): string =>
+    s.normalize("NFKD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+
+  // Significant words from the original query for relevance check
   const queryWords = new Set(
-    scrubbed
-      .toLowerCase()
+    normalizeWord(scrubbed)
       .split(/\s+/)
       .filter(w => w.length > 2 && !["the", "and", "for", "with", "from", "that", "this", "are", "was", "has", "its", "not", "but"].includes(w)),
   );
@@ -382,8 +404,7 @@ router.get("/rawg/image", async (req, res) => {
   function isRelevant(gameName: string): boolean {
     if (queryWords.size === 0) return false;
     const gameWords = new Set(
-      gameName
-        .toLowerCase()
+      normalizeWord(gameName)
         .replace(/[^a-z0-9\s]/g, " ")
         .split(/\s+/)
         .filter(w => w.length > 2),
@@ -458,6 +479,53 @@ router.get("/rawg/image", async (req, res) => {
             ratings_count: best.ratings_count,
           };
           break;
+        }
+      }
+    }
+
+    // Publisher / platform fallback: if no specific game matched but the title mentions
+    // a publisher/platform, search RAWG for a representative flagship game.
+    if (!bestResult && publisherFallback) {
+      // Use search_exact + relevance check so we get the actual flagship title,
+      // not whatever happens to be most-added with a fuzzy match.
+      const fbWords = new Set(
+        normalizeWord(publisherFallback).split(/\s+/).filter(w => w.length > 2),
+      );
+      const fbUrl = new URL("https://api.rawg.io/api/games");
+      fbUrl.searchParams.set("key", apiKey);
+      fbUrl.searchParams.set("search", publisherFallback);
+      fbUrl.searchParams.set("search_exact", "true");
+      fbUrl.searchParams.set("page_size", "10");
+      fbUrl.searchParams.set("exclude_additions", "true");
+      fbUrl.searchParams.set("ordering", "-added");
+      const fbResp = await fetch(fbUrl.toString(), {
+        headers: { "User-Agent": "Leakr/1.0" },
+        signal: AbortSignal.timeout(6000),
+      });
+      if (fbResp.ok) {
+        const fbData = (await fbResp.json()) as {
+          results?: Array<{ background_image?: string; name?: string; slug?: string; ratings_count?: number }>;
+        };
+        const fbCandidates = (fbData.results ?? []).filter(r => {
+          if (!r.background_image || r.background_image.includes("media/screenshots")) return false;
+          if (!r.name || !r.slug) return false;
+          const nameWords = new Set(
+            normalizeWord(r.name).replace(/[^a-z0-9\s]/g, " ").split(/\s+/).filter(w => w.length > 2),
+          );
+          // Require every word of the fallback query to appear in the game name
+          return [...fbWords].every(w => nameWords.has(w));
+        });
+        if (fbCandidates.length > 0) {
+          // Prefer the most-rated match
+          const fbBest = fbCandidates.reduce((a, b) =>
+            (b.ratings_count ?? 0) > (a.ratings_count ?? 0) ? b : a,
+          );
+          bestResult = {
+            background_image: fbBest.background_image!,
+            name: fbBest.name!,
+            slug: fbBest.slug!,
+            ratings_count: fbBest.ratings_count,
+          };
         }
       }
     }
