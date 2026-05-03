@@ -84,16 +84,54 @@ const NON_GAMING_TITLE_PATTERNS: RegExp[] = [
   /\b(cartoon|animated|anime|live[-\s]?action)\s+(series|show|adaptation|spin-?off|reboot|special|movie|film)\b/i,
   /\btv\s+(series|show|adaptation|spin-?off|reboot)\b/i,
   /\bto\s+get\s+(a\s+|an\s+|its\s+|the\s+)?(new\s+|upcoming\s+)?(cartoon|animated|anime|tv|live[-\s]?action)\b/i,
+  // Adaptation news where game IP is being made into movie/film/show. Detected by
+  // co-occurrence of a media-format keyword (movie/film) with a production keyword
+  // (teaser/trailer/cast/director/premiere/streaming/sequel/reboot). This catches
+  // titles like "Zach Cregger's Resident Evil Movie Gets Its First Big Teaser Trailer"
+  // without needing to enumerate IP names.
+  /\b(movie|film)\b.{0,60}\b(teaser|trailer|premiere|release date|cast|casting|director|filming|streaming|first look|reboot|sequel|prequel|stars?\s+\w+)\b/i,
+  /\b(teaser|trailer|premiere|cast|casting|director|first look)\b.{0,60}\b(movie|film)\b/i,
+  // Streaming-service adaptation announcements
+  /\b(hbo(\s+max)?|netflix|amazon\s+prime|prime\s+video|disney\s*\+|disney\s+plus|paramount\s*\+|paramount\s+plus|peacock|apple\s+tv\s*\+?|hulu|max)\s+(series|show|adaptation|original|movie|film)\b/i,
+  /\b(series|show|movie|film)\b.{0,30}\b(on|coming to|debuts on|streaming on)\s+(hbo|netflix|amazon|prime|disney|paramount|peacock|apple|hulu|max)\b/i,
+  // Bare TV / live-action references not already caught above
+  /\b(tv\s+show|tv\s+series|live[-\s]action\s+(movie|film|series|show|adaptation))\b/i,
+  // Anime / cartoon / manga production news. Restricted to clear adaptation-format
+  // keywords. Generic words like "trailer/reveal/announced/debut/premiere" are dropped
+  // because games legitimately use them ("anime-style trailer for Persona 6 reveal").
+  /\b(anime|cartoon|manga)\s+(adaptation|series|show|movie|film|spin-?off|tv\s+show)\b/i,
+  /\b(adaptation|series|show|movie|film|animation|animated\s+(series|show|film|movie))\s+based\s+on\s+(the\s+)?(game|video\s*game|franchise)\b/i,
+  // Generic "X movie/film [verb]" pattern — captures standalone subjects like
+  // "Resident Evil Movie Gets..." that the co-occurrence regex above doesn't anchor.
+  /\b\w{3,}['']?s?\s+(movie|film)\s+(gets?|has|will|stars?|features?|premieres?|releases?|trailer|teaser|first\s+look|cast(ing)?|director|delayed|confirmed|announced)\b/i,
+  // Season / episode references for game-IP TV shows. Restricted to STRICT TV/streaming
+  // context because live-service games (Halo Infinite Season 5, Destiny 2 Episode 3,
+  // Fortnite Chapter 6) legitimately use the same vocabulary. Generic words like
+  // "premiere/streaming" are dropped from the context list — they're too broad and
+  // false-block live-service "Season 5 premieres tomorrow"-style headlines.
+  /\b(season\s+\d+|episode\s+\d+)\b.{0,40}\b(tv\s+show|tv\s+series|hbo|netflix|amazon\s+prime|prime\s+video|disney\s*\+|disney\s+plus|paramount\s*\+|paramount\s+plus|peacock|apple\s+tv|hulu|max\s+(series|originals)|series\s+(premiere|finale)|cast(ing)?|director|showrunner)\b/i,
+  /\b(tv\s+show|tv\s+series|hbo|netflix|amazon\s+prime|prime\s+video|disney\s*\+|disney\s+plus|paramount\s*\+|paramount\s+plus|peacock|apple\s+tv|hulu|showrunner)\b.{0,40}\b(season\s+\d+|episode\s+\d+)\b/i,
+  /\b(renewed|cancelled|canceled|picked\s+up)\s+for\s+(a\s+)?(second|third|fourth|fifth|\d+(?:st|nd|rd|th)?)?\s*season\s*\d*\b/i,
+  /\b(series\s+(premiere|finale)|tv\s+series)\b/i,
+  /\bSeason\s+\d+\s+Episode\s+\d+/i,
+  // Physical LEGO merch reveals — bricks count is a strong physical indicator.
+  // The existing LEGO filter only blocks discount/sale wording; this catches reveals
+  // like "Lego reveals Sega Genesis console, bringing 479 bricks of retro charm".
+  /\blego\b.{0,80}\b\d+\s*bricks?\b/i,
+  /\b\d+\s*bricks?\b.{0,80}\blego\b/i,
+  /\blego\b.{0,80}\b(building\s+set|brick\s+set|brick\s+model|minifig(ure)?s?)\b/i,
   // Esports content — leagues, majors, tournaments, pro teams (user does not want esports)
   /\besports?\b/i,
   /\b(call of duty|overwatch|valorant|rocket league|cs:?go|counter[\s-]strike|apex legends|league of legends|dota\s*2|fortnite|halo|street fighter|tekken|smash bros)\s+(league|championship|major|invitational|world\s+cup|pro\s+league|world\s+championship|finals?|playoffs?)\b/i,
   /\b(the international|cdl|lcs|lec|lpl|lck|owl|vct|esl pro league|blast premier|iem|dreamhack)\b/i,
   /\b(pro\s+team|esports\s+team|esports\s+org(anization)?)\b/i,
   /\bdenied\s+visas?\b/i,
-  // Podcast / audio content
+  // Podcast / audio content. "Episode N" / "Ep N" alone are too broad (live-service
+  // games and devlogs use them); only block when paired with explicit podcast/audio
+  // language so we don't false-block "Ep 3: New gameplay reveal" or game story episodes.
   /\bpodcast\b/i,
-  /\bepisode \d+\b/i,
-  /\bep\.?\s*\d+\b/i,
+  /\b(ep\.?|episode)\s+\d+\b.{0,30}\b(podcast|audio show|interview show)\b/i,
+  /\b(podcast|audio show)\b.{0,30}\b(ep\.?|episode)\s+\d+\b/i,
   // Opinion / editorial pieces (strict — no opinion content allowed)
   /^opinion[:\s—–]/i,
   /^editorial[:\s—–]/i,
@@ -574,7 +612,7 @@ function applyCorroboration(items: IntelItem[]): IntelItem[] {
 
 // ── Cache helpers ─────────────────────────────────────────────────────────────
 const CACHE_TTL = 15 * 60 * 1000;
-const CACHE_VERSION = "v22";
+const CACHE_VERSION = "v23";
 
 async function fetchWithCache<T>(
   cacheKey: string,
