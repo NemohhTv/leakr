@@ -2,7 +2,7 @@
   "buildCommand": "pnpm install && pnpm run typecheck:libs && pnpm --filter @workspace/api-server run build && NODE_ENV=production BASE_PATH=/ PORT=3000 pnpm --filter @workspace/leakr run build",
   "outputDirectory": "artifacts/leakr/dist/public",
   "functions": {
-    "api/index.ts": {
+    "api/index.js": {
       "memory": 1024,
       "maxDuration": 30
     }
