@@ -78,6 +78,40 @@ const NON_GAMING_CATEGORIES = new Set([
   "movies", "tv", "film", "streaming", "new york times",
 ]);
 
+// Words that indicate a title has meaningful news content (not just a bare game name)
+const NEWS_SIGNAL_WORDS = [
+  // Confirmation / announcement
+  "confirmed", "confirms", "confirm", "official", "officially",
+  "announced", "announces", "announcement", "reveals", "revealed", "reveal",
+  // Leaks
+  "leaked", "leak", "leaks", "datamined", "datamine",
+  // Reports / rumors
+  "report", "reportedly", "rumor", "rumour", "sources", "source",
+  "according to", "insider",
+  // Media / events
+  "trailer", "gameplay", "screenshot", "footage", "dlc", "expansion",
+  "showcase", "direct", "state of play", "event",
+  // Status updates
+  "update", "patch", "hotfix", "release", "releases", "releasing",
+  "launches", "launch", "launching", "coming", "arrives", "out now",
+  "free", "available", "discount", "sale",
+  // Context qualifiers
+  "sequel", "remake", "remaster", "prequel", "spin-off", "spinoff",
+  "new", "next", "first", "exclusive", "cancelled", "delayed",
+  "review", "preview", "hands-on",
+  // Attributed speech
+  "says", "said", "explains", "explains", "hints", "teases", "claims",
+  "denies", "responds", "addresses",
+  // Specifics
+  "date", "price", "details", "sales", "copies", "million",
+  "characters", "support", "crossplay", "cross-play",
+];
+
+function hasMeaningfulNewsSignal(title: string): boolean {
+  const lower = title.toLowerCase();
+  return NEWS_SIGNAL_WORDS.some(w => lower.includes(w));
+}
+
 function isNonGamingItem(title: string, categories: string[]): boolean {
   if (NON_GAMING_TITLE_PATTERNS.some(p => p.test(title))) return true;
   const lcCats = categories.map(c => c.toLowerCase());
@@ -291,10 +325,11 @@ function parseRedditAtom(
     const articleUrl = externalAnchor?.getAttribute("href") || redditThreadUrl;
     const isLinkPost = articleUrl !== redditThreadUrl;
 
-    // Filter: posts with ≤ 2 words in title that have no external article link
-    // (e.g. bare game-name megathread posts like "Hogwarts Legacy" with no context)
+    // Filter vague posts: short titles (≤ 4 words) with no meaningful news signal,
+    // regardless of whether they are link posts or self-posts.
+    // e.g. "Hogwarts Legacy", "GTA 6", "Halo 3" get dropped; "GTA 6 Leaked" passes.
     const wordCount = title.split(/\s+/).filter(w => w.length > 0).length;
-    if (wordCount <= 2 && !isLinkPost) continue;
+    if (wordCount <= 4 && !hasMeaningfulNewsSignal(title)) continue;
 
     // Thumbnail priority:
     // 1. Server-injected og:image from the linked article — permanent, high quality
@@ -389,7 +424,7 @@ function applyCorroboration(items: IntelItem[]): IntelItem[] {
 
 // ── Cache helpers ─────────────────────────────────────────────────────────────
 const CACHE_TTL = 15 * 60 * 1000;
-const CACHE_VERSION = "v12";
+const CACHE_VERSION = "v13";
 
 async function fetchWithCache<T>(
   cacheKey: string,

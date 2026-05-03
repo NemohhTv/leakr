@@ -126,15 +126,15 @@ function mergeAtomFeeds(xml1: string, xml2: string): string {
   return header + all.join("\n") + "\n</feed>";
 }
 
-// ── Reddit: r/GamingLeaksAndRumours (enriched JSON — hot + new combined) ─────
+// ── Reddit: r/GamingLeaksAndRumours (top-week 5 + new 5) ─────────────────────
 router.get("/feed/reddit-enriched", async (req, res) => {
   try {
-    const [hotData, newData] = await Promise.all([
-      buildRedditEnrichedResponse("https://www.reddit.com/r/GamingLeaksAndRumours/hot.rss?limit=5"),
-      buildRedditEnrichedResponse("https://www.reddit.com/r/GamingLeaksAndRumours/new.rss?limit=25"),
+    const [topData, newData] = await Promise.all([
+      buildRedditEnrichedResponse("https://www.reddit.com/r/GamingLeaksAndRumours/top.rss?limit=5&t=week"),
+      buildRedditEnrichedResponse("https://www.reddit.com/r/GamingLeaksAndRumours/new.rss?limit=5"),
     ]);
-    const xml = mergeAtomFeeds(hotData.xml, newData.xml);
-    const thumbnails = { ...newData.thumbnails, ...hotData.thumbnails };
+    const xml = mergeAtomFeeds(topData.xml, newData.xml);
+    const thumbnails = { ...newData.thumbnails, ...topData.thumbnails };
     res.setHeader("Content-Type", "application/json");
     res.setHeader("Cache-Control", "public, max-age=900");
     res.json({ xml, thumbnails });
@@ -144,16 +144,18 @@ router.get("/feed/reddit-enriched", async (req, res) => {
   }
 });
 
-// ── Reddit: r/gamingnews (enriched JSON) ─────────────────────────────────────
+// ── Reddit: r/GamingNews (top-week 5 + new 5) ────────────────────────────────
 router.get("/feed/gamingnews-enriched", async (req, res) => {
   try {
-    const limit = Math.min(Number(req.query["limit"]) || 25, 50);
-    const data = await buildRedditEnrichedResponse(
-      `https://www.reddit.com/r/gamingnews/top.rss?limit=${limit}&t=day`,
-    );
+    const [topData, newData] = await Promise.all([
+      buildRedditEnrichedResponse("https://www.reddit.com/r/gamingnews/top.rss?limit=5&t=week"),
+      buildRedditEnrichedResponse("https://www.reddit.com/r/gamingnews/new.rss?limit=5"),
+    ]);
+    const xml = mergeAtomFeeds(topData.xml, newData.xml);
+    const thumbnails = { ...newData.thumbnails, ...topData.thumbnails };
     res.setHeader("Content-Type", "application/json");
     res.setHeader("Cache-Control", "public, max-age=900");
-    res.json(data);
+    res.json({ xml, thumbnails });
   } catch (err) {
     req.log.error({ err }, "GamingNews enriched feed failed");
     res.status(500).json({ error: "Failed to fetch GamingNews enriched feed" });
