@@ -39,18 +39,24 @@ export function Header({
 
         {/* Top Row */}
         <div className="flex items-center justify-between h-16">
-          <div className="flex items-center gap-3">
+          <button
+            type="button"
+            onClick={() => { setSourceFilter("all"); setTierFilter("ALL"); }}
+            className="flex items-center gap-3 group focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 rounded"
+            aria-label="Reset filters and show all reports"
+            data-testid="logo-reset-filters"
+          >
             <div className="relative flex items-center justify-center">
-              <Radio className="w-5 h-5 text-primary" />
+              <Radio className="w-5 h-5 text-primary transition-transform group-hover:scale-110" />
               <span className="absolute inset-0 rounded-full animate-ping opacity-30 bg-primary" style={{ animationDuration: "1.8s" }} />
             </div>
             <img
               src="/leakr-logo.png"
               alt="LEAKR"
-              className="h-8 w-auto object-contain select-none"
+              className="h-8 w-auto object-contain select-none transition-opacity group-hover:opacity-80"
               draggable={false}
             />
-          </div>
+          </button>
 
           <div className="hidden md:flex text-[10px] uppercase tracking-widest font-mono text-zinc-500 border border-zinc-800 bg-zinc-950 px-3 py-1 rounded">
             <span className="flex items-center gap-2">

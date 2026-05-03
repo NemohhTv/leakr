@@ -19,10 +19,21 @@ const SKIP_THUMBNAIL_DOMAINS = [
   "xcancel.com", "twitter.com", "x.com",
   "imgur.com", "ibb.co", "i.redd.it", "preview.redd.it",
   "old.reddit.com", "www.reddit.com", "redd.it",
+  // Instagram + Meta CDNs hard-block hotlinking — the URL works in a browser
+  // session but returns 403/expired-signature when loaded from another origin.
+  "instagram.com", "cdninstagram.com", "fbcdn.net",
+  // TikTok CDNs similarly use signed URLs that expire quickly.
+  "tiktok.com", "tiktokcdn.com",
 ];
 
 function isSkippableThumbnailDomain(url: string): boolean {
   return SKIP_THUMBNAIL_DOMAINS.some(d => url.includes(d));
+}
+
+// If an og:image we resolved is itself hosted on a hotlink-blocked CDN, treat it as a miss
+// so the client can fall back to RAWG instead of rendering a broken image.
+function isHotlinkBlockedImageUrl(url: string): boolean {
+  return /(?:cdninstagram\.com|fbcdn\.net|tiktokcdn\.com|scontent[\w-]*\.)/i.test(url);
 }
 
 // Extract YouTube video ID from common URL formats (handles all watch/live/embed/shorts paths,
@@ -97,7 +108,9 @@ async function getArticleThumbnail(url: string): Promise<string | null> {
   if (ytId) {
     return `https://img.youtube.com/vi/${ytId}/hqdefault.jpg`;
   }
-  return fetchOgImage(url).catch(() => null);
+  const og = await fetchOgImage(url).catch(() => null);
+  if (og && isHotlinkBlockedImageUrl(og)) return null;
+  return og;
 }
 
 async function buildRedditEnrichedResponse(
