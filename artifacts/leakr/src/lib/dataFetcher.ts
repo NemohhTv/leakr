@@ -78,6 +78,17 @@ const NON_GAMING_TITLE_PATTERNS: RegExp[] = [
   /TV Show Review/i,
   /Episode Recap/i,
   /Season \d+ Episode/i,
+  // Cartoon / animated / live-action / anime adaptations of game IPs (not gaming news)
+  // e.g. "Pac-Man to get a new cartoon series", "Fallout TV show season 2 cast announced"
+  /\b(cartoon|animated|anime|live[-\s]?action)\s+(series|show|adaptation|spin-?off|reboot|special|movie|film)\b/i,
+  /\btv\s+(series|show|adaptation|spin-?off|reboot)\b/i,
+  /\bto\s+get\s+(a\s+|an\s+|its\s+|the\s+)?(new\s+|upcoming\s+)?(cartoon|animated|anime|tv|live[-\s]?action)\b/i,
+  // Esports content — leagues, majors, tournaments, pro teams (user does not want esports)
+  /\besports?\b/i,
+  /\b(call of duty|overwatch|valorant|rocket league|cs:?go|counter[\s-]strike|apex legends|league of legends|dota\s*2|fortnite|halo|street fighter|tekken|smash bros)\s+(league|championship|major|invitational|world\s+cup|pro\s+league|world\s+championship|finals?|playoffs?)\b/i,
+  /\b(the international|cdl|lcs|lec|lpl|lck|owl|vct|esl pro league|blast premier|iem|dreamhack)\b/i,
+  /\b(pro\s+team|esports\s+team|esports\s+org(anization)?)\b/i,
+  /\bdenied\s+visas?\b/i,
   // Podcast / audio content
   /\bpodcast\b/i,
   /\bepisode \d+\b/i,
@@ -562,7 +573,7 @@ function applyCorroboration(items: IntelItem[]): IntelItem[] {
 
 // ── Cache helpers ─────────────────────────────────────────────────────────────
 const CACHE_TTL = 15 * 60 * 1000;
-const CACHE_VERSION = "v20";
+const CACHE_VERSION = "v21";
 
 async function fetchWithCache<T>(
   cacheKey: string,

@@ -378,6 +378,9 @@ router.get("/rawg/image", async (req, res) => {
     { pattern: /\b(playstation studios|playstation|sony interactive|sony)\b/i, fallbackQuery: "god of war" },
     { pattern: /\b(xbox game studios|xbox|microsoft gaming|microsoft)\b/i, fallbackQuery: "halo infinite" },
     { pattern: /\b(nintendo)\b/i, fallbackQuery: "zelda tears of the kingdom" },
+    { pattern: /\b(take[\s-]?two|take[\s-]?two interactive|rockstar(\s+games)?|2k(\s+games)?)\b/i, fallbackQuery: "grand theft auto vi" },
+    { pattern: /\b(valve(\s+(corporation|software))?)\b/i, fallbackQuery: "counter-strike 2" },
+    { pattern: /\b(ubisoft(\s+(entertainment|montreal))?)\b/i, fallbackQuery: "assassin's creed" },
   ];
   // Only apply the fallback when EXACTLY ONE publisher is mentioned. If a title mentions
   // multiple ("Sony and Microsoft comment on..."), there's no single right flagship to pick,
