@@ -530,7 +530,7 @@ router.get("/rawg/image", async (req, res) => {
   // Map these to a flagship first-party title so we still return a representative cover.
   const PUBLISHER_FALLBACKS: Array<{ pattern: RegExp; fallbackQuery: string }> = [
     { pattern: /\b(playstation studios|playstation|sony interactive|sony)\b/i, fallbackQuery: "god of war" },
-    { pattern: /\b(xbox game studios|xbox|microsoft gaming|microsoft)\b/i, fallbackQuery: "halo infinite" },
+    { pattern: /\b(xbox game studios|xbox|microsoft gaming|microsoft)\b/i, fallbackQuery: "halo" },
     { pattern: /\b(nintendo)\b/i, fallbackQuery: "zelda tears of the kingdom" },
     { pattern: /\b(take[\s-]?two|take[\s-]?two interactive|rockstar(\s+games)?|2k(\s+games)?)\b/i, fallbackQuery: "grand theft auto vi" },
     { pattern: /\b(valve(\s+(corporation|software))?)\b/i, fallbackQuery: "counter-strike 2" },
@@ -541,6 +541,16 @@ router.get("/rawg/image", async (req, res) => {
   // so we skip the fallback and let the normal search path decide.
   const publisherMatches = PUBLISHER_FALLBACKS.filter(p => p.pattern.test(rawQuery));
   const publisherFallback = publisherMatches.length === 1 ? publisherMatches[0]!.fallbackQuery : null;
+  // Words that ONLY signal a publisher/platform — when the headline mentions one of
+  // these, we don't want primary-search matches to pass relevance solely on the basis
+  // of containing the publisher word (e.g. "PlayStation All-Stars Battle Royale"
+  // matching a query about a generic PlayStation news story). The publisher fallback
+  // path will land on the actual flagship (God of War / Halo) instead.
+  const PUBLISHER_KEYWORDS = new Set([
+    "playstation", "sony", "xbox", "microsoft", "nintendo",
+    "rockstar", "valve", "ubisoft", "bethesda", "bungie", "capcom",
+    "konami", "activision", "blizzard",
+  ]);
 
   try {
     // Unicode-safe word normalizer: strips diacritics so "Pokémon" → "pokemon",
@@ -591,8 +601,19 @@ router.get("/rawg/image", async (req, res) => {
         .filter(w => w.length > 2),
     );
     let matchCount = 0;
+    let nonPublisherMatchCount = 0;
     for (const w of qw) {
-      if (gameWords.has(w)) matchCount++;
+      if (gameWords.has(w)) {
+        matchCount++;
+        if (!PUBLISHER_KEYWORDS.has(w)) nonPublisherMatchCount++;
+      }
+    }
+    // When the headline mentions a publisher AND we're in the primary-relevance path
+    // (i.e. NOT an alias override), require at least one NON-publisher word match.
+    // This stops "PlayStation All-Stars Battle Royale" from satisfying a generic
+    // "PlayStation news" query — the publisher fallback will pick God of War instead.
+    if (publisherFallback && !queryWordsOverride && nonPublisherMatchCount === 0) {
+      return false;
     }
     // If every word of the game name appears in the query it's a definite match
     if (gameWords.size > 0 && [...gameWords].every(w => qw.has(w))) return true;
@@ -762,12 +783,17 @@ router.get("/rawg/image", async (req, res) => {
     // the full title nor any 2+ word window matches a real game, but the single word "alien"
     // matches Alien: Isolation. Still gated by isRelevant + ratings_count > 100 so we won't
     // false-match noise. Words that are platforms/stores/generic are skipped.
-    if (!bestResult) {
+    //
+    // SKIP this path entirely when a publisher fallback is set: random word matches like
+    // "studios" → "This War of Mine" would beat the intended publisher flagship (Halo /
+    // God of War). The publisher fallback below is the higher-confidence answer.
+    if (!bestResult && !publisherFallback) {
       const SINGLE_WORD_SKIP = new Set([
-        "ps", "ps4", "ps5", "psp", "ps2", "ps3", "vita", "psn", "store",
+        "ps", "ps4", "ps5", "psp", "ps2", "ps3", "vita", "psn", "store", "playstation",
         "xbox", "xbla", "xsx", "xbsx", "switch", "wii", "ds", "3ds",
         "pc", "mac", "ios", "android", "epic", "steam", "deck", "gog",
         "nintendo", "sony", "microsoft", "valve", "ubisoft", "ea", "activision", "blizzard",
+        "rockstar", "bethesda", "bungie", "capcom", "konami", "square", "enix",
         "rumor", "leaked", "leak", "trailer", "gameplay", "review", "preview",
         "today", "tomorrow", "yesterday", "week", "month", "year",
         "release", "released", "launch", "launched", "coming", "now",
