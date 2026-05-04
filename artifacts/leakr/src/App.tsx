@@ -78,7 +78,9 @@ function App() {
       setIsLoading(true);
       setError(null);
       try {
-        const data = await fetchFeedData();
+        // Always pull live feeds on initial page load so Reddit sources do not
+        // disappear until the user manually refreshes.
+        const data = await fetchFeedData(true);
         setItems(data);
       } catch (e) {
         console.error(e);
