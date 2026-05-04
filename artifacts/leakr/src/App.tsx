@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
 import { IntelItem } from "@/types";
 import { fetchFeedData } from "@/lib/dataFetcher";
+import { fetchExtraSourceData } from "@/lib/extraSourceFetcher";
 import { Header, ViewMode, SourceFilter, TierFilter } from "@/components/Header";
 import { GridView } from "@/components/GridView";
 import { SwipeView } from "@/components/SwipeView";
@@ -9,6 +10,20 @@ import { Loader2 } from "lucide-react";
 
 const REFRESH_COOLDOWN_MS = 60_000;
 const REFRESH_KEY = "leakr_last_manual_refresh";
+
+async function loadAllFeedData(forceRefresh = false): Promise<IntelItem[]> {
+  const [coreItems, extraItems] = await Promise.all([
+    fetchFeedData(forceRefresh),
+    fetchExtraSourceData(),
+  ]);
+
+  const byId = new Map<string, IntelItem>();
+  for (const item of [...coreItems, ...extraItems]) {
+    byId.set(item.id, item);
+  }
+
+  return [...byId.values()].sort((a, b) => b.publishedAt.getTime() - a.publishedAt.getTime());
+}
 
 function App() {
   const [items, setItems] = useState<IntelItem[]>([]);
@@ -46,7 +61,7 @@ function App() {
     setIsRefreshing(true);
     setError(null);
     try {
-      const data = await fetchFeedData(true);
+      const data = await loadAllFeedData(true);
       setItems(data);
     } catch (e) {
       console.error(e);
@@ -80,7 +95,7 @@ function App() {
       try {
         // Always pull live feeds on initial page load so Reddit sources do not
         // disappear until the user manually refreshes.
-        const data = await fetchFeedData(true);
+        const data = await loadAllFeedData(true);
         setItems(data);
       } catch (e) {
         console.error(e);
