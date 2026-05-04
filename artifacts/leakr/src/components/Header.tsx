@@ -1,6 +1,7 @@
 import { LayoutGrid, Maximize2, Radio, RefreshCw } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { IntelSource } from "@/types";
+import { sourceLabel } from "@/lib/sourceLabels";
 
 export type ViewMode = "grid" | "swipe";
 export type SourceFilter = IntelSource;
@@ -26,13 +27,17 @@ export function Header({
   tierFilters, toggleTierFilter, clearTierFilters,
   onRefresh, isRefreshing, refreshCooldownSec,
 }: HeaderProps) {
-  const sources: { label: string; value: SourceFilter }[] = [
-    { label: "r/GamingLeaksAndRumours", value: "reddit" },
-    { label: "r/GamingNews", value: "gamingnews" },
-    { label: "IGN", value: "ign" },
-    { label: "InsiderGaming", value: "insider" },
-    { label: "VGC", value: "vgc" },
-    { label: "Gameranx", value: "gameranx" },
+  const sources: SourceFilter[] = [
+    "reddit",
+    "gamingnews",
+    "gamerant",
+    "windowscentral",
+    "gamespot",
+    "mp1st",
+    "ign",
+    "insider",
+    "vgc",
+    "gameranx",
   ];
 
   const tiers: TierFilter[] = ["S", "A", "B", "C", "F"];
@@ -151,14 +156,15 @@ export function Header({
             >
               ALL
             </button>
-            {sources.map(s => {
-              const active = sourceFilters.has(s.value);
+            {sources.map(source => {
+              const active = sourceFilters.has(source);
               return (
                 <button
-                  key={s.value}
-                  onClick={() => toggleSourceFilter(s.value)}
-                  data-testid={`filter-source-${s.value}`}
+                  key={source}
+                  onClick={() => toggleSourceFilter(source)}
+                  data-testid={`filter-source-${source}`}
                   aria-pressed={active}
+                  title={sourceLabel(source)}
                   className={cn(
                     "px-2.5 py-1 text-[10px] uppercase tracking-wider font-bold rounded-full transition-colors border whitespace-nowrap",
                     active
@@ -166,7 +172,7 @@ export function Header({
                       : "bg-transparent text-zinc-400 border-zinc-800 hover:border-zinc-600",
                   )}
                 >
-                  {s.label}
+                  {sourceLabel(source)}
                 </button>
               );
             })}
