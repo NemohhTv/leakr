@@ -8,12 +8,16 @@ interface PlaceholderArtworkProps {
 }
 
 const SOURCE_PALETTE: Record<IntelSource, { from: string; via: string; accent: string }> = {
-  reddit:        { from: "#2a0c0c", via: "#1a0808", accent: "rgba(255, 69, 0, 0.55)" },
-  gamingnews:    { from: "#0c1e2a", via: "#08121a", accent: "rgba(64, 156, 255, 0.55)" },
-  ign:           { from: "#2a1a0c", via: "#1a0f08", accent: "rgba(255, 165, 64, 0.55)" },
-  insider:       { from: "#1a0c2a", via: "#0f081a", accent: "rgba(155, 89, 255, 0.55)" },
-  vgc:           { from: "#0c2a1a", via: "#081a0f", accent: "rgba(64, 230, 140, 0.55)" },
-  gameranx:      { from: "#2a0c1f", via: "#1a0815", accent: "rgba(255, 79, 184, 0.55)" },
+  reddit:         { from: "#2a0c0c", via: "#1a0808", accent: "rgba(255, 69, 0, 0.55)" },
+  gamingnews:     { from: "#0c1e2a", via: "#08121a", accent: "rgba(64, 156, 255, 0.55)" },
+  gamerant:       { from: "#1f152a", via: "#100a1a", accent: "rgba(180, 110, 255, 0.55)" },
+  windowscentral: { from: "#0c1b2a", via: "#08101a", accent: "rgba(68, 160, 255, 0.55)" },
+  gamespot:       { from: "#2a210c", via: "#1a1408", accent: "rgba(255, 205, 64, 0.55)" },
+  mp1st:          { from: "#0c2a24", via: "#081a16", accent: "rgba(64, 230, 205, 0.55)" },
+  ign:            { from: "#2a1a0c", via: "#1a0f08", accent: "rgba(255, 165, 64, 0.55)" },
+  insider:        { from: "#1a0c2a", via: "#0f081a", accent: "rgba(155, 89, 255, 0.55)" },
+  vgc:            { from: "#0c2a1a", via: "#081a0f", accent: "rgba(64, 230, 140, 0.55)" },
+  gameranx:       { from: "#2a0c1f", via: "#1a0815", accent: "rgba(255, 79, 184, 0.55)" },
 };
 
 function deriveMonogram(title: string): string {
