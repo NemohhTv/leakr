@@ -1,4 +1,14 @@
-export type IntelSource = "reddit" | "gamingnews" | "ign" | "insider" | "vgc" | "gameranx";
+export type IntelSource =
+  | "reddit"
+  | "gamingnews"
+  | "gamerant"
+  | "windowscentral"
+  | "gamespot"
+  | "mp1st"
+  | "ign"
+  | "insider"
+  | "vgc"
+  | "gameranx";
 
 export interface IntelItem {
   id: string;
