@@ -7,10 +7,29 @@ const SOURCE_CREDIBILITY: Record<IntelSource, number> = {
   vgc: 0.90,       // Video Games Chronicle — dedicated, well-sourced
   insider: 0.85,   // Insider Gaming — specialty outlet
   ign: 0.78,       // IGN — mainstream but credible
+  gamespot: 0.76,  // GameSpot — long-running mainstream gaming outlet
+  windowscentral: 0.74, // Windows Central — strong Xbox / Microsoft gaming coverage
   gameranx: 0.72,  // Gameranx — mainstream gaming news/lists, decent track record
+  gamerant: 0.68,  // GameRant — broad gaming outlet, useful but mixed signal quality
+  mp1st: 0.66,     // MP1st — useful multiplayer/patch/news source
   gamingnews: 0.62,// r/gamingnews — aggregated, variable
   reddit: 0.55,    // r/GamingLeaksAndRumours — enthusiast posts
 };
+
+const CREDIBLE_OUTLET_SOURCES: IntelSource[] = [
+  "vgc",
+  "insider",
+  "ign",
+  "gamespot",
+  "windowscentral",
+  "gameranx",
+  "gamerant",
+  "mp1st",
+];
+
+function isCredibleSource(source: IntelSource): boolean {
+  return CREDIBLE_OUTLET_SOURCES.includes(source);
+}
 
 // Named journalists / insider sources boost credibility
 const NAMED_SOURCES = [
@@ -120,6 +139,7 @@ export function analyzeTierAndPlausibility(
 
   const hasConfirmedPhrase = countMatches(t, CONFIRMED_PHRASES) > 0;
   const hasConfirmedNewsKeyword = countMatches(t, CONFIRMED_NEWS_KEYWORDS) > 0;
+  const credibleSource = isCredibleSource(source);
   const isOfficialConfirmed =
     hasConfirmedPhrase ||
     t.includes("confirmed") ||
@@ -129,10 +149,8 @@ export function analyzeTierAndPlausibility(
     t.includes("announcement") ||
     t.includes("release date");
 
-  // Confirmed game updates from credible sources (VGC, Insider, IGN, Gameranx) are S-tier facts
-  const isConfirmedFromCredible =
-    hasConfirmedNewsKeyword &&
-    (source === "vgc" || source === "insider" || source === "ign" || source === "gameranx");
+  // Confirmed game updates from credible sources are S-tier facts
+  const isConfirmedFromCredible = hasConfirmedNewsKeyword && credibleSource;
 
   // Verified official statement — named person/company giving attributed quote or explanation
   // Only from credible outlets; these are factual, not rumors → A-tier
@@ -140,7 +158,7 @@ export function analyzeTierAndPlausibility(
     !isConfirmedFromCredible &&
     !isOfficialConfirmed &&
     countMatches(t, OFFICIAL_STATEMENT_KEYWORDS) > 0 &&
-    (source === "vgc" || source === "insider" || source === "ign" || source === "gameranx");
+    credibleSource;
 
   if (isOfficialConfirmed || isConfirmedFromCredible) {
     tier = "S";
@@ -163,7 +181,7 @@ export function analyzeTierAndPlausibility(
     tier = "C";
   } else {
     // Fall-through: neutral gaming news from a credible outlet → B tier
-    if (source === "vgc" || source === "insider" || source === "ign" || source === "gameranx") {
+    if (credibleSource) {
       tier = "B";
     } else if (sourcedFromCredibleOutlet) {
       // Reddit post linking to a credible outlet — treat as B-tier news
@@ -244,9 +262,11 @@ export function analyzeTierAndPlausibility(
     signals.push("Corroborated by multiple outlets");
   }
 
-  // 10. VGC / Insider source premium
+  // 10. Source-specific signals
   if (source === "vgc") signals.push("VGC premium source");
   if (source === "insider") signals.push("Insider Gaming source");
+  if (source === "gamespot") signals.push("GameSpot source");
+  if (source === "windowscentral") signals.push("Windows Central source");
 
   // 10b. Reddit post linking to a credible outlet — single uplift to avoid double-counting
   // with the tier B floor in the tier-determination block above.
