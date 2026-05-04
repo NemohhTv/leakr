@@ -17,6 +17,99 @@ function textFromHtml(html: string): string {
   return (div.textContent || "").replace(/\s+/g, " ").trim();
 }
 
+const OPINION_PATTERNS: RegExp[] = [
+  /^opinion[:\s-]/i,
+  /^editorial[:\s-]/i,
+  /^review[:\s-]/i,
+  /\bopinion\b/i,
+  /\beditorial\b/i,
+  /\bthinkpiece\b/i,
+  /\bhot take\b/i,
+  /\bunpopular opinion\b/i,
+  /^why\b.{0,80}\b(should|shouldn['’]?t|needs|deserves|matters|fails|failed|works)\b/i,
+  /^how\b.{0,40}\b(could|should|might)\b/i,
+  /^here['’]?s why\b/i,
+  /^let['’]?s talk about\b/i,
+  /\b(the )?case for\b/i,
+  /\b(the )?case against\b/i,
+  /\bcan learn from\b/i,
+  /\bcould learn from\b/i,
+  /\bdeserves better\b/i,
+  /\branked\b/i,
+  /\bbest\b.{0,30}\b(games|bosses|characters|weapons|levels|moments)\b/i,
+  /\bworst\b.{0,30}\b(games|bosses|characters|weapons|levels|moments)\b/i,
+  /\btop\s+\d+\b/i,
+];
+
+const NON_GAMING_PATTERNS: RegExp[] = [
+  /\bwindows 11\b/i,
+  /\bwindows 10\b/i,
+  /\bsurface\b/i,
+  /\bcopilot\b/i,
+  /\bai pc\b/i,
+  /\blaptop\b/i,
+  /\bphone\b/i,
+  /\btablet\b/i,
+  /\bprocessor\b/i,
+  /\bcpu\b/i,
+  /\bgpu driver\b/i,
+  /\boffice 365\b/i,
+  /\bmicrosoft 365\b/i,
+  /\bsecurity update\b/i,
+  /\bdeal(s)?\b/i,
+  /\bdiscount\b/i,
+  /\bprime day\b/i,
+  /\bblack friday\b/i,
+  /\bcyber monday\b/i,
+  /\bmovie review\b/i,
+  /\btv show\b/i,
+  /\bbox office\b/i,
+  /\bwordle\b/i,
+  /\bconnections\b/i,
+];
+
+const GAMING_SIGNALS: RegExp[] = [
+  /\bgaming\b/i,
+  /\bgames?\b/i,
+  /\bvideo games?\b/i,
+  /\bxbox\b/i,
+  /\bgame pass\b/i,
+  /\bplaystation\b/i,
+  /\bps5\b/i,
+  /\bnintendo\b/i,
+  /\bswitch 2?\b/i,
+  /\bsteam\b/i,
+  /\bpc gaming\b/i,
+  /\btrailer\b/i,
+  /\bgameplay\b/i,
+  /\brelease date\b/i,
+  /\bdlc\b/i,
+  /\bpatch\b/i,
+  /\bupdate\b/i,
+  /\bleak(ed|s)?\b/i,
+  /\brumou?r(s)?\b/i,
+  /\bdeveloper\b/i,
+  /\bstudio\b/i,
+];
+
+function shouldKeepItem(source: IntelSource, title: string, description: string): boolean {
+  const text = `${title} ${description}`;
+  if (OPINION_PATTERNS.some(pattern => pattern.test(text))) return false;
+
+  // WindowsCentral is broad tech coverage, so require a direct gaming/Xbox signal.
+  if (source === "windowscentral") {
+    return GAMING_SIGNALS.some(pattern => pattern.test(text)) &&
+      !NON_GAMING_PATTERNS.some(pattern => pattern.test(text) && !/\bxbox\b|\bgaming\b|\bgame pass\b/i.test(text));
+  }
+
+  // Other extra sources are gaming-focused, but still strip obvious non-gaming/deals noise.
+  if (NON_GAMING_PATTERNS.some(pattern => pattern.test(text)) && !GAMING_SIGNALS.some(pattern => pattern.test(text))) {
+    return false;
+  }
+
+  return true;
+}
+
 function getText(parent: Element, selector: string): string {
   return parent.querySelector(selector)?.textContent?.trim() || "";
 }
@@ -87,7 +180,7 @@ function parseFeed(xmlStr: string, source: IntelSource, serverThumbnails: Record
   const xml = parser.parseFromString(xmlStr, "application/xml");
   const nodes = Array.from(xml.querySelectorAll("item, entry"));
 
-  return nodes.slice(0, 20).map(item => {
+  return nodes.slice(0, 30).map(item => {
     const title = getText(item, "title") || "Unknown Title";
     const link = getLink(item);
     const rawDescription = getFirstElementText(item, ["description", "summary", "content"]);
@@ -110,7 +203,11 @@ function parseFeed(xmlStr: string, source: IntelSource, serverThumbnails: Record
       corroborated: false,
       signals,
     };
-  }).filter(item => item.url && item.title !== "Unknown Title");
+  }).filter(item =>
+    item.url &&
+    item.title !== "Unknown Title" &&
+    shouldKeepItem(item.source, item.title, item.description),
+  ).slice(0, 20);
 }
 
 const EXTRA_FEEDS: Array<{ source: IntelSource; endpoint: string }> = [
