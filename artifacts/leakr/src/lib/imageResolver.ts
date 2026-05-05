@@ -10,9 +10,9 @@ import { useEffect, useState, useRef } from 'react';
 // Negative results (no match found) are cached too with a shorter TTL so we
 // don't keep retrying the same hopeless query on every reload, but we do
 // re-attempt eventually in case RAWG's catalogue grows.
-const CACHE_KEY = "leakr_rawg_image_cache_v9";
+const CACHE_KEY = "leakr_rawg_image_cache_v10";
 const POSITIVE_TTL_MS = 7 * 24 * 60 * 60 * 1000;   // 7 days
-const NEGATIVE_TTL_MS = 6 * 60 * 60 * 1000;        // 6 hours
+const NEGATIVE_TTL_MS = 2 * 60 * 60 * 1000;        // 2 hours
 
 interface CacheEntry { url: string | null; ts: number; }
 
@@ -112,9 +112,13 @@ export function useLazyImage(title: string, initialThumbnail: string | null) {
   const ref = useRef<HTMLDivElement | HTMLImageElement>(null);
 
   useEffect(() => {
+    setImgSrc(initialThumbnail);
+    setIsLoading(!initialThumbnail);
+    setIsError(false);
+    setUsedRawg(false);
+
     // Source provided a real thumbnail — use it, no RAWG needed
     if (initialThumbnail) {
-      setImgSrc(initialThumbnail);
       setIsLoading(false);
       return;
     }
