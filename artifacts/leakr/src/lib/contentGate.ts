@@ -1,5 +1,10 @@
 import { IntelItem } from "../types";
 
+const GTA_6_BUSINESS_ALLOW_PATTERNS: RegExp[] = [
+  /\b(gta\s*6|gta\s*vi|grand theft auto\s*(6|vi))\b.{0,120}\b(strauss\s+zelnick|take[-\s]?two|take[-\s]?two interactive|rockstar|earnings|investor|shareholder|revenue|fiscal|forecast|guidance|delay|release window|launch window|comments?|says?|confirms?|reiterates?)\b/i,
+  /\b(strauss\s+zelnick|take[-\s]?two|take[-\s]?two interactive|rockstar|earnings|investor|shareholder|revenue|fiscal|forecast|guidance)\b.{0,120}\b(gta\s*6|gta\s*vi|grand theft auto\s*(6|vi))\b/i,
+];
+
 const BLOCKED_PATTERNS: RegExp[] = [
   // Anime, manga, episode recaps, and explainers. These are not gaming news.
   /\banime\b/i,
@@ -218,13 +223,14 @@ function hasAny(patterns: RegExp[], text: string): boolean {
 
 export function shouldKeepAggregatorItem(item: IntelItem): boolean {
   const text = `${item.title} ${item.description}`;
+  const isGta6BusinessUpdate = hasAny(GTA_6_BUSINESS_ALLOW_PATTERNS, text);
 
-  if (hasAny(BLOCKED_PATTERNS, text)) return false;
+  if (!isGta6BusinessUpdate && hasAny(BLOCKED_PATTERNS, text)) return false;
 
   // WindowsCentral is primarily tech, so it needs explicit gaming or Xbox context.
   if (item.source === "windowscentral" && !hasAny(WINDOWS_CENTRAL_GAMING_PATTERNS, text)) {
     return false;
   }
 
-  return hasAny(ALLOW_PATTERNS, text);
+  return isGta6BusinessUpdate || hasAny(ALLOW_PATTERNS, text);
 }
