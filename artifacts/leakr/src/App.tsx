@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo, useCallback } from "react";
 import { IntelItem } from "@/types";
 import { fetchFeedData } from "@/lib/dataFetcher";
 import { fetchExtraSourceData } from "@/lib/extraSourceFetcher";
+import { shouldKeepAggregatorItem } from "@/lib/contentGate";
 import { Header, ViewMode, SourceFilter, TierFilter } from "@/components/Header";
 import { GridView } from "@/components/GridView";
 import { SwipeView } from "@/components/SwipeView";
@@ -34,7 +35,9 @@ async function loadAllFeedData(forceRefresh = false): Promise<IntelItem[]> {
 
   const byId = new Map<string, IntelItem>();
   for (const item of [...coreItems, ...extraItems]) {
-    byId.set(item.id, item);
+    if (shouldKeepAggregatorItem(item)) {
+      byId.set(item.id, item);
+    }
   }
 
   return [...byId.values()].sort((a, b) => b.publishedAt.getTime() - a.publishedAt.getTime());
