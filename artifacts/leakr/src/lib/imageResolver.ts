@@ -1,18 +1,9 @@
 import { useEffect, useState, useRef } from 'react';
 
 // ─── Persistent RAWG image cache ──────────────────────────────────────────
-// Backed by localStorage so thumbnails survive page reloads. Without this,
-// every refresh re-queries RAWG for the same titles (e.g. publisher-fallback
-// "PlayStation Studios" → "God of War"), which is slow AND visibly flickers
-// the thumbnails. RAWG image URLs are CDN-stable for long periods, so a
-// week-long TTL is comfortable.
-//
-// Negative results (no match found) are cached too with a shorter TTL so we
-// don't keep retrying the same hopeless query on every reload, but we do
-// re-attempt eventually in case RAWG's catalogue grows.
-const CACHE_KEY = "leakr_rawg_image_cache_v10";
+const CACHE_KEY = "leakr_rawg_image_cache_v11";
 const POSITIVE_TTL_MS = 7 * 24 * 60 * 60 * 1000;   // 7 days
-const NEGATIVE_TTL_MS = 2 * 60 * 60 * 1000;        // 2 hours
+const NEGATIVE_TTL_MS = 60 * 60 * 1000;            // 1 hour
 
 interface CacheEntry { url: string | null; ts: number; }
 
@@ -28,11 +19,10 @@ function loadCacheFromStorage(): void {
     for (const [title, entry] of Object.entries(parsed)) {
       if (!entry || typeof entry.ts !== "number") continue;
       const ttl = entry.url ? POSITIVE_TTL_MS : NEGATIVE_TTL_MS;
-      if (now - entry.ts > ttl) continue; // expired — skip
+      if (now - entry.ts > ttl) continue;
       imageCache[title] = entry.url;
     }
   } catch {
-    // Corrupt cache — wipe and start fresh.
     try { window.localStorage.removeItem(CACHE_KEY); } catch { /* ignore */ }
   }
 }
@@ -41,14 +31,10 @@ let persistTimer: ReturnType<typeof setTimeout> | null = null;
 function schedulePersist(): void {
   if (typeof window === "undefined") return;
   if (persistTimer) clearTimeout(persistTimer);
-  // Debounce — many cards resolve in quick succession on first paint, so we
-  // batch the writes into a single localStorage round-trip.
   persistTimer = setTimeout(() => {
     persistTimer = null;
     try {
       const now = Date.now();
-      // Re-read existing entries so we preserve timestamps for anything that
-      // hadn't changed this session, then overlay the in-memory map.
       const existing: Record<string, CacheEntry> = {};
       try {
         const raw = window.localStorage.getItem(CACHE_KEY);
@@ -59,8 +45,7 @@ function schedulePersist(): void {
       }
       window.localStorage.setItem(CACHE_KEY, JSON.stringify(existing));
     } catch {
-      // Quota exceeded or otherwise unwritable — just skip; in-memory cache
-      // still works for the rest of this session.
+      // In-memory cache still works for this session.
     }
   }, 400);
 }
@@ -72,11 +57,10 @@ function setCache(title: string, url: string | null): void {
 
 loadCacheFromStorage();
 
-// Titles that should never hit RAWG (guide/puzzle/movie content).
-// Everything else is assumed to be gaming-related — these feeds are gaming-news only,
-// so the cost of a few wasted RAWG lookups is far less than the UX cost of blank cards.
-// Adding a new game/franchise/publisher should NEVER require a code change here.
 const SKIP_RAWG_PATTERNS = [
+  /\banime\b/i,
+  /\bmanga\b/i,
+  /\bepisode\s+\d+\b/i,
   /\bConnections\b.{0,15}#\d+/i,
   /NYT Connections/i,
   /Wordle/i,
@@ -87,21 +71,79 @@ const SKIP_RAWG_PATTERNS = [
   /episode recap/i,
   /\bdeals\b.{0,20}\b(today|this week)\b/i,
   /best \w+ (deals|prices|sales)/i,
-  // Articles about game-adjacent movies/shows — the image would be a movie poster, not game art
   /\b(movie|film|anime|tv show|television|series)\b.*\b(review|trailer|premiere|release|box office|sequel|adaptation)\b/i,
   /discusses?.{0,30}(movie|film|show|series|anime)/i,
   /\b(movie|film|anime|show)\b.*\b(discusses?|talks?|says?|reveals?|explains?)\b/i,
-  /growth in (mario|sonic|pokemon|zelda|halo|uncharted|last of us) (movie|film|show)/i,
-  // Growth/character in movie discussions
-  /\w+ in (mario|sonic|pokemon|zelda) (movies?|films?)/i,
+];
+
+const RAWG_ALIAS_FALLBACKS: Array<{ pattern: RegExp; queries: string[] }> = [
+  {
+    pattern: /\bgrove street games\b/i,
+    queries: ["grand theft auto trilogy definitive edition", "grand theft auto san andreas", "ark survival ascended"],
+  },
+  {
+    pattern: /\bbluepoint\b/i,
+    queries: ["demon's souls", "shadow of the colossus"],
+  },
+  {
+    pattern: /\bbend studio\b/i,
+    queries: ["days gone"],
+  },
+  {
+    pattern: /\bnaughty dog\b/i,
+    queries: ["the last of us", "uncharted"],
+  },
+  {
+    pattern: /\bsucker punch\b/i,
+    queries: ["ghost of tsushima"],
+  },
+  {
+    pattern: /\binsomniac\b/i,
+    queries: ["marvel's spider-man", "wolverine"],
+  },
+  {
+    pattern: /\bsanta monica studio\b/i,
+    queries: ["god of war"],
+  },
+  {
+    pattern: /\bcd projekt|cdpr\b/i,
+    queries: ["the witcher 4", "cyberpunk 2077"],
+  },
+  {
+    pattern: /\brockstar\b/i,
+    queries: ["grand theft auto vi", "red dead redemption 2"],
+  },
+  {
+    pattern: /\bbethesda\b/i,
+    queries: ["the elder scrolls vi", "starfield"],
+  },
+  {
+    pattern: /\bubisoft\b/i,
+    queries: ["assassin's creed", "far cry"],
+  },
+  {
+    pattern: /\bcapcom\b/i,
+    queries: ["resident evil", "monster hunter wilds"],
+  },
+  {
+    pattern: /\bfromsoftware\b|\bfrom software\b/i,
+    queries: ["elden ring", "dark souls"],
+  },
+  {
+    pattern: /\bio interactive\b/i,
+    queries: ["hitman", "007 first light"],
+  },
 ];
 
 function shouldFetchRAWG(title: string): boolean {
-  // Single source of truth: only skip if the title is clearly NOT about a game
-  // (Wordle/Connections puzzles, movie reviews, deals roundups). Everything else
-  // is gaming-related by virtue of being in a gaming feed — let the server decide
-  // whether RAWG can resolve a specific title.
   return !SKIP_RAWG_PATTERNS.some(p => p.test(title));
+}
+
+function rawgQueriesForTitle(title: string): string[] {
+  const aliases = RAWG_ALIAS_FALLBACKS
+    .filter(entry => entry.pattern.test(title))
+    .flatMap(entry => entry.queries);
+  return [...new Set([title, ...aliases])];
 }
 
 export function useLazyImage(title: string, initialThumbnail: string | null) {
@@ -117,13 +159,11 @@ export function useLazyImage(title: string, initialThumbnail: string | null) {
     setIsError(false);
     setUsedRawg(false);
 
-    // Source provided a real thumbnail — use it, no RAWG needed
     if (initialThumbnail) {
       setIsLoading(false);
       return;
     }
 
-    // Article doesn't seem to be about a specific game — skip RAWG entirely
     if (!shouldFetchRAWG(title)) {
       setIsLoading(false);
       setIsError(true);
@@ -149,7 +189,6 @@ export function useLazyImage(title: string, initialThumbnail: string | null) {
   }, [initialThumbnail, title]);
 
   const fetchRAWGImage = async () => {
-    // Check in-memory cache first (keyed by raw title)
     if (title in imageCache) {
       const cached = imageCache[title];
       setImgSrc(cached);
@@ -163,18 +202,21 @@ export function useLazyImage(title: string, initialThumbnail: string | null) {
     setIsError(false);
 
     try {
-      const res = await fetch(`/api/rawg/image?q=${encodeURIComponent(title)}`);
-      if (!res.ok) throw new Error('RAWG ' + res.status);
-      const data = await res.json();
-
-      if (data.image) {
-        setCache(title, data.image);
-        setImgSrc(data.image);
-        setUsedRawg(true);
-      } else {
-        setCache(title, null);
-        setIsError(true);
+      for (const query of rawgQueriesForTitle(title)) {
+        const res = await fetch(`/api/rawg/image?q=${encodeURIComponent(query)}`);
+        if (!res.ok) continue;
+        const data = await res.json();
+        if (data.image) {
+          setCache(title, data.image);
+          setImgSrc(data.image);
+          setUsedRawg(true);
+          setIsLoading(false);
+          return;
+        }
       }
+
+      setCache(title, null);
+      setIsError(true);
     } catch {
       setCache(title, null);
       setIsError(true);
@@ -183,8 +225,6 @@ export function useLazyImage(title: string, initialThumbnail: string | null) {
     }
   };
 
-  // Called by <img onError> when the URL fails to load (expired CDN, 404, etc.)
-  // Falls back to RAWG once if the broken image was the source-provided thumbnail.
   const onImageError = () => {
     if (!usedRawg && shouldFetchRAWG(title)) {
       setImgSrc(null);
