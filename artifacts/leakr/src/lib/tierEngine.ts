@@ -2,118 +2,160 @@ import { IntelSource } from "../types";
 
 type Tier = "S" | "A" | "B" | "C" | "F";
 
-// Source credibility base scores (0–1)
-const SOURCE_CREDIBILITY: Record<IntelSource, number> = {
-  vgc: 0.90,       // Video Games Chronicle — dedicated, well-sourced
-  insider: 0.85,   // Insider Gaming — specialty outlet
-  ign: 0.78,       // IGN — mainstream but credible
-  gamespot: 0.76,  // GameSpot — long-running mainstream gaming outlet
-  windowscentral: 0.74, // Windows Central — strong Xbox / Microsoft gaming coverage
-  gameranx: 0.72,  // Gameranx — mainstream gaming news/lists, decent track record
-  gamerant: 0.68,  // GameRant — broad gaming outlet, useful but mixed signal quality
-  mp1st: 0.66,     // MP1st — useful multiplayer/patch/news source
-  gamingnews: 0.62,// r/gamingnews — aggregated, variable
-  reddit: 0.55,    // r/GamingLeaksAndRumours — enthusiast posts
+type ClaimType = "confirmed" | "strong-leak" | "reported-rumor" | "weak-rumor" | "speculation" | "routine" | "low-signal";
+
+const SOURCE_TRUST: Record<IntelSource, number> = {
+  vgc: 86,
+  insider: 82,
+  ign: 76,
+  gamespot: 74,
+  windowscentral: 72,
+  gameranx: 66,
+  gamerant: 60,
+  mp1st: 64,
+  gamingnews: 52,
+  reddit: 44,
 };
 
-const CREDIBLE_OUTLET_SOURCES: IntelSource[] = [
-  "vgc",
-  "insider",
-  "ign",
-  "gamespot",
-  "windowscentral",
-  "gameranx",
-  "gamerant",
-  "mp1st",
-];
+const PREMIUM_SOURCES: IntelSource[] = ["vgc", "insider", "ign", "gamespot", "windowscentral"];
+const MID_SOURCES: IntelSource[] = ["gameranx", "gamerant", "mp1st"];
 
-function isCredibleSource(source: IntelSource): boolean {
-  return CREDIBLE_OUTLET_SOURCES.includes(source);
-}
-
-// Named journalists / insider sources boost credibility
-const NAMED_SOURCES = [
-  "jeff grubb", "tom henderson", "jason schreier", "jez corden",
-  "mike ybarra", "nick baker", "nate the hate", "shpeshal nick",
-  "colin moriarty", "greg miller", "imran khan", "xbox era",
-  "bloomberg", "reuters", "kotaku", "eurogamer", "gamespot",
-  "gamesindustry", "the game awards", "summer game fest",
-];
-
-// Confirmed / official events — these are real, not rumors
-const CONFIRMED_PHRASES = [
+const OFFICIAL_CONFIRMATION = [
   "officially confirmed", "officially announced", "officially revealed",
-  "confirmed by", "announced by", "revealed by", "live now",
-  "available now", "launches today", "out now", "now available",
-  "has released", "has launched", "has been released",
+  "confirmed by", "announced by", "revealed by", "confirmed that",
+  "has confirmed", "has announced", "has revealed", "launches today",
+  "available now", "out now", "now available", "released today",
+  "release date confirmed", "gets release date", "sets release date",
 ];
 
-// Game news / updates that are factual confirmed events
-const CONFIRMED_NEWS_KEYWORDS = [
-  "update", "patch", "hotfix", "patch notes", "game update",
-  "major update", "huge update", "free update", "title update",
-  "addresses", "adds new", "introduces", "brings new",
-  "dlc released", "expansion released", "now out",
-  "developer response", "developers confirm",
-  "launches", "release date", "announced",
+const ROUTINE_CONFIRMED = [
+  "patch notes", "hotfix", "title update", "game update", "server maintenance",
+  "free update", "major update", "dlc released", "expansion released",
+  "launch trailer", "gameplay trailer", "story trailer", "overview trailer",
 ];
 
-// Verified official statements — an attributed quote/explanation from a named person/company
-// These are confirmed facts, not rumors; should yield A-tier when from credible outlets
-const OFFICIAL_STATEMENT_KEYWORDS = [
-  "explains", "clarifies", "opens up", "speaks out",
-  "responds to", "comments on", "talks about", "defends",
-  "criticizes", "weighs in", "stance on", "thoughts on",
-  "spoke about", "spoke on", "spoke with", "talked about",
-  "addressed", "said about", "shared thoughts",
+const HARD_EVIDENCE = [
+  "datamined", "datamine", "files found", "code strings", "source code",
+  "achievement list", "trophy list", "rating board", "pegi rated", "esrb rated",
+  "classification board", "domain registered", "trademark filed", "patent filed",
+  "backend listing", "store listing", "steamdb", "playstation store listing",
+  "microsoft store listing", "nintendo eshop listing",
 ];
 
-// Job titles / roles indicating a named developer/executive is the source
-const DEVELOPER_ROLE_KEYWORDS = [
-  "director", "creative director", "game director", "lead designer",
-  "ceo", "president", "vice president", "head of", "studio head",
-  "producer", "developer", "designer", "co-founder", "founder",
+const SOURCED_REPORTING = [
+  "sources say", "sources close to", "according to sources", "according to a report",
+  "according to reports", "reportedly", "said to be", "understood to be",
+  "believed to be", "familiar with the matter", "anonymous sources",
+  "people familiar", "internal documents", "documents obtained",
+];
+
+const RUMOR_LANGUAGE = [
+  "rumor", "rumour", "rumored", "rumoured", "allegedly", "apparently",
+  "supposedly", "claimed", "claims", "leaker claims", "insider claims",
+  "i've heard", "we've heard",
+];
+
+const SPECULATION_LANGUAGE = [
+  "could be", "might be", "may be", "possibly", "perhaps", "seems like",
+  "appears to", "fan theory", "speculation", "wishlist", "hope to see",
+  "would make sense", "expected to", "likely to", "maybe",
+];
+
+const WEAK_LANGUAGE = [
+  "unverified", "unconfirmed", "take with a grain", "grain of salt",
+  "unclear", "unknown", "no confirmation", "not confirmed", "may not",
+  "could still", "subject to change",
+];
+
+const OFFICIAL_STATEMENT = [
+  "explains", "clarifies", "responds to", "comments on", "talks about",
+  "addressed", "spoke about", "spoke on", "statement", "interview",
+  "shared details", "revealed details", "confirmed details",
+];
+
+const DEV_ROLE = [
+  "creative director", "game director", "director", "producer", "lead designer",
+  "studio head", "head of", "ceo", "president", "developer", "designer",
   "narrative director", "art director", "technical director",
 ];
 
-const STRONG_LEAK_PHRASES = [
-  "datamined", "datamine", "files found", "code strings",
-  "source code", "achievement list", "trophy list", "rating board",
-  "pegi rated", "esrb rated", "classification board",
-  "domain registered", "trademark filed", "patent filed",
-];
-
-const RUMOUR_PHRASES = [
-  "sources say", "sources close to", "according to sources",
-  "i've heard", "we've heard", "reportedly", "allegedly", "said to be",
-  "understood to be", "believed to be", "familiar with the matter",
-];
-
-const SPECULATION_PHRASES = [
-  "could be", "might be", "possibly", "perhaps", "what if",
-  "fan theory", "speculation", "wishlist", "hope to see",
-];
-
-// Platform/product specificity signals — more specific = more credible for leaks
 const PLATFORM_SIGNALS = [
-  "ps5", "playstation 5", "xbox series", "series x", "series s",
-  "nintendo switch", "switch 2", "pc", "steam", "epic games store",
-  "mobile", "ios", "android",
+  "ps5", "playstation 5", "playstation", "xbox series", "series x", "series s",
+  "xbox", "nintendo switch", "switch 2", "switch", "pc", "steam",
+  "epic games store", "game pass", "ps plus", "mobile", "ios", "android",
 ];
 
-// Linguistic uncertainty markers
-const UNCERTAINTY_MARKERS = [
-  "apparently", "supposedly", "maybe", "unclear", "unknown",
-  "unverified", "unconfirmed", "take with a grain", "grain of salt",
+const NAMED_SOURCES = [
+  "jason schreier", "tom henderson", "jeff grubb", "jez corden", "nate the hate",
+  "nick baker", "shpeshal nick", "billbil-kun", "dusk golem", "midori",
+  "bloomberg", "reuters", "gamesindustry", "the game awards", "summer game fest",
+  "take-two", "take two", "strauss zelnick", "rockstar", "cd projekt", "capcom",
 ];
+
+const LOW_SIGNAL = [
+  "teases", "hints", "suggests", "fans think", "players think", "could tease",
+  "may hint", "cryptic", "subtle hint", "job listing suggests",
+];
+
+function includesAny(text: string, phrases: string[]): boolean {
+  return phrases.some(phrase => text.includes(phrase));
+}
 
 function countMatches(text: string, phrases: string[]): number {
-  return phrases.filter(p => text.includes(p)).length;
+  return phrases.filter(phrase => text.includes(phrase)).length;
 }
 
-function clamp(v: number, min: number, max: number): number {
-  return Math.max(min, Math.min(max, v));
+function clamp(value: number, min: number, max: number): number {
+  return Math.max(min, Math.min(max, value));
 }
+
+function classifyClaim(text: string): ClaimType {
+  const official = includesAny(text, OFFICIAL_CONFIRMATION);
+  const routine = includesAny(text, ROUTINE_CONFIRMED);
+  const hardEvidence = includesAny(text, HARD_EVIDENCE);
+  const sourced = includesAny(text, SOURCED_REPORTING);
+  const rumor = includesAny(text, RUMOR_LANGUAGE) || /\bleak(ed|s)?\b/.test(text);
+  const speculation = includesAny(text, SPECULATION_LANGUAGE);
+  const lowSignal = includesAny(text, LOW_SIGNAL);
+
+  if (official) return "confirmed";
+  if (hardEvidence) return "strong-leak";
+  if (sourced && rumor) return "reported-rumor";
+  if (sourced) return "reported-rumor";
+  if (rumor) return "weak-rumor";
+  if (routine) return "routine";
+  if (speculation) return "speculation";
+  if (lowSignal) return "low-signal";
+  return "routine";
+}
+
+function tierForClaim(claimType: ClaimType, score: number, source: IntelSource): Tier {
+  switch (claimType) {
+    case "confirmed":
+      return score >= 84 ? "S" : "A";
+    case "strong-leak":
+      return score >= 78 ? "A" : "B";
+    case "reported-rumor":
+      return score >= 72 ? "B" : "C";
+    case "weak-rumor":
+      return source === "reddit" ? "C" : score >= 62 ? "B" : "C";
+    case "speculation":
+      return score >= 58 ? "C" : "F";
+    case "low-signal":
+      return "F";
+    case "routine":
+    default:
+      return score >= 70 ? "B" : "C";
+  }
+}
+
+const TIER_RANGES: Record<Tier, [number, number]> = {
+  S: [88, 100],
+  A: [74, 89],
+  B: [56, 76],
+  C: [34, 58],
+  F: [5, 34],
+};
 
 export interface PlausibilityResult {
   tier: Tier;
@@ -128,166 +170,113 @@ export function analyzeTierAndPlausibility(
   corroborated = false,
   sourcedFromCredibleOutlet = false,
 ): PlausibilityResult {
-  const t = (title + " " + description).toLowerCase();
+  const text = `${title} ${description}`.toLowerCase();
   const signals: string[] = [];
+  const sourceTrust = SOURCE_TRUST[source] ?? 50;
+  const claimType = classifyClaim(text);
 
-  // --- BASE: source credibility ---
-  let score = SOURCE_CREDIBILITY[source] * 40; // maps 0.55–0.90 → ~22–36 base pts
+  let score = sourceTrust;
 
-  // --- TIER DETERMINATION (keyword hierarchy) ---
-  let tier: Tier;
+  if (PREMIUM_SOURCES.includes(source)) signals.push("Trusted outlet");
+  if (MID_SOURCES.includes(source)) signals.push("Secondary outlet");
+  if (source === "reddit" || source === "gamingnews") signals.push("Community sourced");
 
-  const hasConfirmedPhrase = countMatches(t, CONFIRMED_PHRASES) > 0;
-  const hasConfirmedNewsKeyword = countMatches(t, CONFIRMED_NEWS_KEYWORDS) > 0;
-  const credibleSource = isCredibleSource(source);
-  const isOfficialConfirmed =
-    hasConfirmedPhrase ||
-    t.includes("confirmed") ||
-    t.includes("official") ||
-    t.includes("trailer") ||
-    t.includes("reveal") ||
-    t.includes("announcement") ||
-    t.includes("release date");
-
-  // Confirmed game updates from credible sources are S-tier facts
-  const isConfirmedFromCredible = hasConfirmedNewsKeyword && credibleSource;
-
-  // Verified official statement — named person/company giving attributed quote or explanation
-  // Only from credible outlets; these are factual, not rumors → A-tier
-  const isOfficialStatement =
-    !isConfirmedFromCredible &&
-    !isOfficialConfirmed &&
-    countMatches(t, OFFICIAL_STATEMENT_KEYWORDS) > 0 &&
-    credibleSource;
-
-  if (isOfficialConfirmed || isConfirmedFromCredible) {
-    tier = "S";
-  } else if (
-    isOfficialStatement ||
-    countMatches(t, STRONG_LEAK_PHRASES) > 0 ||
-    t.includes("leaked") ||
-    t.includes("leak")
-  ) {
-    tier = "A";
-  } else if (
-    countMatches(t, RUMOUR_PHRASES) > 0 ||
-    t.includes("rumour") ||
-    t.includes("rumor") ||
-    t.includes("report") ||
-    t.includes("insider")
-  ) {
-    tier = "B";
-  } else if (countMatches(t, SPECULATION_PHRASES) > 0 || t.includes("possible") || t.includes("might") || t.includes("could")) {
-    tier = "C";
-  } else {
-    // Fall-through: neutral gaming news from a credible outlet → B tier
-    if (credibleSource) {
-      tier = "B";
-    } else if (sourcedFromCredibleOutlet) {
-      // Reddit post linking to a credible outlet — treat as B-tier news
-      tier = "B";
-    } else {
-      tier = "F";
-    }
+  switch (claimType) {
+    case "confirmed":
+      score += 14;
+      signals.push("Official or confirmed claim");
+      break;
+    case "strong-leak":
+      score += 10;
+      signals.push("Hard evidence leak signal");
+      break;
+    case "reported-rumor":
+      score += 3;
+      signals.push("Sourced reporting or rumor");
+      break;
+    case "weak-rumor":
+      score -= source === "reddit" ? 8 : 2;
+      signals.push("Unverified rumor language");
+      break;
+    case "speculation":
+      score -= 16;
+      signals.push("Speculative language");
+      break;
+    case "low-signal":
+      score -= 22;
+      signals.push("Low-signal tease or hint");
+      break;
+    case "routine":
+      score -= 2;
+      signals.push("Routine news item");
+      break;
   }
 
-  // --- PLAUSIBILITY FACTORS ---
-
-  // 1. Tier base bonus
-  const tierBonus: Record<Tier, number> = { S: 50, A: 35, B: 20, C: 8, F: 0 };
-  score += tierBonus[tier];
-
-  // 2. Named journalist / reputable source
-  const namedMatch = NAMED_SOURCES.find(n => t.includes(n));
-  if (namedMatch) {
-    score += 18;
-    signals.push(`Named source: ${namedMatch}`);
+  const officialStatement = includesAny(text, OFFICIAL_STATEMENT);
+  const devRole = includesAny(text, DEV_ROLE);
+  if (officialStatement && devRole) {
+    score += 8;
+    signals.push("Named developer or executive statement");
+  } else if (officialStatement) {
+    score += 4;
+    signals.push("Attributed statement");
   }
 
-  // 3. Confirmed news bonus (update/patch/release from credible source)
-  if (isConfirmedFromCredible) {
-    score += 20;
-    signals.push("Confirmed gaming news");
+  const namedSource = NAMED_SOURCES.find(name => text.includes(name));
+  if (namedSource) {
+    score += 7;
+    signals.push(`Named source: ${namedSource}`);
   }
 
-  // 3b. Official attributed statement from named person/company via credible outlet
-  if (isOfficialStatement) {
-    score += 14;
-    signals.push("Verified official statement");
+  const platformHits = PLATFORM_SIGNALS.filter(signal => text.includes(signal));
+  if (platformHits.length > 0) {
+    score += Math.min(6, platformHits.length * 2);
+    signals.push(`Platform context: ${platformHits.slice(0, 2).join(", ")}`);
   }
 
-  // 3c. Named developer/executive making an official statement — highest confidence verified fact
-  const hasDevRole = DEVELOPER_ROLE_KEYWORDS.some(r => t.includes(r));
-  if (hasDevRole && isOfficialStatement) {
-    score += 12;
-    signals.push("Named developer statement");
+  const hardEvidenceCount = countMatches(text, HARD_EVIDENCE);
+  if (hardEvidenceCount > 1) {
+    score += Math.min(8, hardEvidenceCount * 3);
+    signals.push("Multiple evidence signals");
   }
 
-  // 4. Strong leak evidence phrases
-  const leakPhraseCount = countMatches(t, STRONG_LEAK_PHRASES);
-  if (leakPhraseCount > 0) {
-    score += leakPhraseCount * 8;
-    signals.push("Hard evidence found");
+  const weakCount = countMatches(text, WEAK_LANGUAGE);
+  if (weakCount > 0) {
+    score -= Math.min(14, weakCount * 5);
+    signals.push("Uncertainty penalty");
   }
 
-  // 5. Platform specificity — specific claims are more verifiable
-  const platformMatches = PLATFORM_SIGNALS.filter(p => t.includes(p));
-  if (platformMatches.length > 0) {
-    score += Math.min(platformMatches.length * 4, 12);
-    signals.push(`Platform mentioned: ${platformMatches.slice(0, 2).join(", ")}`);
+  if (includesAny(text, SPECULATION_LANGUAGE) && claimType !== "speculation") {
+    score -= 5;
+    signals.push("Speculation penalty");
   }
 
-  // 6. Confirmed phrase bonus (beyond tier)
-  if (hasConfirmedPhrase) {
-    score += 15;
-    signals.push("Explicit confirmation language");
-  }
-
-  // 7. Rumour / source attribution language
-  if (countMatches(t, RUMOUR_PHRASES) > 0) {
-    score += 6;
-    signals.push("Sourced claim");
-  }
-
-  // 8. Uncertainty markers — reduces confidence
-  const uncertaintyCount = countMatches(t, UNCERTAINTY_MARKERS);
-  if (uncertaintyCount > 0) {
-    score -= uncertaintyCount * 6;
-    signals.push("Uncertainty language detected");
-  }
-
-  // 9. Cross-source corroboration — strongest signal
   if (corroborated) {
-    score += 22;
-    signals.push("Corroborated by multiple outlets");
+    score += 12;
+    signals.push("Corroborated by multiple sources");
   }
 
-  // 10. Source-specific signals
-  if (source === "vgc") signals.push("VGC premium source");
-  if (source === "insider") signals.push("Insider Gaming source");
-  if (source === "gamespot") signals.push("GameSpot source");
-  if (source === "windowscentral") signals.push("Windows Central source");
-
-  // 10b. Reddit post linking to a credible outlet — single uplift to avoid double-counting
-  // with the tier B floor in the tier-determination block above.
   if (sourcedFromCredibleOutlet && (source === "reddit" || source === "gamingnews")) {
-    score += 6;
-    signals.push("Linked to credible outlet");
+    score += 10;
+    signals.push("Links to credible outlet");
   }
 
-  // 11. Clamp to tier ranges (soft — don't override strong signals)
-  const tierRanges: Record<Tier, [number, number]> = {
-    S: [72, 100],
-    A: [50, 88],
-    B: [28, 70],
-    C: [12, 45],
-    F: [3, 28],
-  };
+  // Reddit should not score like a verified outlet unless it links credible coverage or has hard evidence.
+  if (source === "reddit" && !sourcedFromCredibleOutlet && claimType !== "strong-leak") {
+    score -= 8;
+    signals.push("Reddit-only claim penalty");
+  }
 
-  const [min, max] = tierRanges[tier];
-  // Small deterministic jitter based on title length to avoid all same-tier items looking identical
-  const jitter = (title.length % 7) - 3;
-  const finalScore = clamp(Math.round(score) + jitter, min, max);
+  // Broad outlets can report true stories, but they should not outrank specialist reports without strong confirmation.
+  if ((source === "gamerant" || source === "gameranx") && claimType !== "confirmed" && claimType !== "strong-leak") {
+    score -= 5;
+    signals.push("Broad outlet confidence cap");
+  }
 
-  return { tier, plausibility: finalScore, signals };
+  score = clamp(Math.round(score), 5, 100);
+  let tier = tierForClaim(claimType, score, source);
+  const [min, max] = TIER_RANGES[tier];
+  const plausibility = clamp(score, min, max);
+
+  return { tier, plausibility, signals };
 }
