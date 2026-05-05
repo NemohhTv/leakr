@@ -1,6 +1,19 @@
-import { IntelItem, IntelSource } from "../types";
+import { IntelItem } from "../types";
 
 const BLOCKED_PATTERNS: RegExp[] = [
+  // Anime, manga, episode recaps, and explainers. These are not gaming news.
+  /\banime\b/i,
+  /\bmanga\b/i,
+  /\bcrunchyroll\b/i,
+  /\bepisode\s+\d+\b/i,
+  /\bseason\s+\d+\s+episode\s+\d+\b/i,
+  /\bseason\s+\d+\b.{0,50}\bepisode\b/i,
+  /\bepisode\b.{0,50}\b(delay|delayed|explained|recap|review|preview|release time|release date)\b/i,
+  /\b(explained|ending explained|delay explained)\b/i,
+  /\brecap\b/i,
+  /\bsubbed\b/i,
+  /\bdubbed\b/i,
+
   // Puzzles and daily games
   /\bwordle\b/i,
   /\bconnections\b/i,
@@ -28,7 +41,7 @@ const BLOCKED_PATTERNS: RegExp[] = [
   /\bboard game\b/i,
   /\bminiatures?\b/i,
 
-  // Product listings, commerce, hardware shopping
+  // Product listings, commerce, hardware shopping, merch, toys
   /\bproduct listings?\b/i,
   /\bpre-?order listings?\b/i,
   /\bamazon listing\b/i,
@@ -41,16 +54,21 @@ const BLOCKED_PATTERNS: RegExp[] = [
   /\bblack friday\b/i,
   /\bcyber monday\b/i,
   /\bmerch\b/i,
+  /\bmerchandise\b/i,
   /\bstatue\b/i,
   /\bfigure\b/i,
-  /\bcollector'?s edition\b.{0,30}\bbuy|preorder|listing|stock\b/i,
+  /\bfigma\b/i,
+  /\bplush\b/i,
+  /\bfunko\b/i,
+  /\blego\b.{0,80}\b(bricks?|set|building kit|minifig|discount|sale|amazon)\b/i,
+  /\bcollector'?s edition\b.{0,40}\b(buy|preorder|listing|stock|available|sold out)\b/i,
 
   // Streaming, film, TV, adaptation entertainment coverage
   /\bstreaming services?\b/i,
   /\bstreaming on\b/i,
   /\bnetflix\b/i,
   /\bhbo\b/i,
-  /\bmax\b.{0,20}\bseries|show|streaming\b/i,
+  /\bmax\b.{0,20}\b(series|show|streaming)\b/i,
   /\bdisney\+|disney plus\b/i,
   /\bprime video\b/i,
   /\bparamount\+|paramount plus\b/i,
@@ -62,10 +80,10 @@ const BLOCKED_PATTERNS: RegExp[] = [
   /\bbox office\b/i,
   /\bmovie review\b/i,
   /\bfilm review\b/i,
-  /\b(movie|film|series|show)\b.{0,60}\b(cast|casting|premiere|trailer|teaser|director|streaming|sequel|reboot|adaptation)\b/i,
-  /\b(cast|casting|premiere|director|streaming)\b.{0,60}\b(movie|film|series|show)\b/i,
+  /\b(movie|film|series|show)\b.{0,70}\b(cast|casting|premiere|trailer|teaser|director|streaming|sequel|reboot|adaptation|episode|season)\b/i,
+  /\b(cast|casting|premiere|director|streaming)\b.{0,70}\b(movie|film|series|show)\b/i,
 
-  // Opinion, reviews, lists, rankings, guides
+  // Opinion, reviews, lists, rankings, guides, explainers
   /^opinion[:\s-]/i,
   /^editorial[:\s-]/i,
   /^review[:\s-]/i,
@@ -74,8 +92,8 @@ const BLOCKED_PATTERNS: RegExp[] = [
   /\bthinkpiece\b/i,
   /\bhot take\b/i,
   /\bunpopular opinion\b/i,
-  /^why\b.{0,90}\b(should|shouldn['’]?t|needs|deserves|matters|fails|failed|works|is still|is the best|is worse)\b/i,
-  /^how\b.{0,45}\b(could|should|might|can fix|needs to)\b/i,
+  /^why\b.{0,90}\b(should|shouldn['’]?t|needs|deserves|matters|fails|failed|works|is still|is the best|is worse|i think|we think)\b/i,
+  /^how\b.{0,45}\b(could|should|might|can fix|needs to|to beat|to find|to unlock|get)\b/i,
   /^here['’]?s why\b/i,
   /^let['’]?s talk about\b/i,
   /\b(the )?case for\b/i,
@@ -86,9 +104,9 @@ const BLOCKED_PATTERNS: RegExp[] = [
   /\branking\b/i,
   /\btier list\b/i,
   /\btop\s+\d+\b/i,
-  /\b\d+\s+(best|worst|greatest)\b/i,
-  /\bbest\b.{0,45}\b(games|bosses|characters|weapons|levels|moments|rpgs|shooters|mods)\b/i,
-  /\bworst\b.{0,45}\b(games|bosses|characters|weapons|levels|moments|rpgs|shooters|mods)\b/i,
+  /\b\d+\s+(best|worst|greatest|things|reasons|ways)\b/i,
+  /\bbest\b.{0,55}\b(games|bosses|characters|weapons|levels|moments|rpgs|shooters|mods|builds|settings|deals)\b/i,
+  /\bworst\b.{0,55}\b(games|bosses|characters|weapons|levels|moments|rpgs|shooters|mods)\b/i,
   /\bguide\b/i,
   /\bwalkthrough\b/i,
   /\btips and tricks\b/i,
@@ -156,7 +174,6 @@ const ALLOW_PATTERNS: RegExp[] = [
   /\bhotfix\b/i,
   /\bdlc\b/i,
   /\bexpansion\b/i,
-  /\bseason\s+\d+\b/i,
   /\broadmap\b/i,
 
   /\bxbox\b/i,
@@ -209,6 +226,5 @@ export function shouldKeepAggregatorItem(item: IntelItem): boolean {
     return false;
   }
 
-  // Keep Reddit leak/news subs if they pass the block list, but still require a real news signal.
   return hasAny(ALLOW_PATTERNS, text);
 }
