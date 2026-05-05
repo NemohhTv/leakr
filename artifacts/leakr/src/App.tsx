@@ -10,6 +10,21 @@ import { Loader2 } from "lucide-react";
 
 const REFRESH_COOLDOWN_MS = 60_000;
 const REFRESH_KEY = "leakr_last_manual_refresh";
+const SOURCE_FILTERS_KEY = "leakr_source_filters_v1";
+const TIER_FILTERS_KEY = "leakr_tier_filters_v1";
+const VALID_SOURCE_FILTERS: SourceFilter[] = [
+  "reddit",
+  "gamingnews",
+  "gamerant",
+  "windowscentral",
+  "gamespot",
+  "mp1st",
+  "ign",
+  "insider",
+  "vgc",
+  "gameranx",
+];
+const VALID_TIER_FILTERS: TierFilter[] = ["S", "A", "B", "C", "F"];
 
 async function loadAllFeedData(forceRefresh = false): Promise<IntelItem[]> {
   const [coreItems, extraItems] = await Promise.all([
@@ -25,18 +40,52 @@ async function loadAllFeedData(forceRefresh = false): Promise<IntelItem[]> {
   return [...byId.values()].sort((a, b) => b.publishedAt.getTime() - a.publishedAt.getTime());
 }
 
+function loadSavedSet<T extends string>(key: string, validValues: readonly T[]): Set<T> {
+  if (typeof window === "undefined") return new Set();
+  try {
+    const raw = window.localStorage.getItem(key);
+    if (!raw) return new Set();
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return new Set();
+    return new Set(parsed.filter((value): value is T => validValues.includes(value)));
+  } catch {
+    return new Set();
+  }
+}
+
+function saveSet<T extends string>(key: string, values: Set<T>): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(key, JSON.stringify([...values]));
+  } catch {
+    // Ignore localStorage failures. Filters still work for the current session.
+  }
+}
+
 function App() {
   const [items, setItems] = useState<IntelItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const [viewMode, setViewMode] = useState<ViewMode>("grid");
-  const [sourceFilters, setSourceFilters] = useState<Set<SourceFilter>>(() => new Set());
-  const [tierFilters, setTierFilters] = useState<Set<TierFilter>>(() => new Set());
+  const [sourceFilters, setSourceFilters] = useState<Set<SourceFilter>>(() =>
+    loadSavedSet(SOURCE_FILTERS_KEY, VALID_SOURCE_FILTERS),
+  );
+  const [tierFilters, setTierFilters] = useState<Set<TierFilter>>(() =>
+    loadSavedSet(TIER_FILTERS_KEY, VALID_TIER_FILTERS),
+  );
   const [selectedItem, setSelectedItem] = useState<IntelItem | null>(null);
 
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [refreshCooldownSec, setRefreshCooldownSec] = useState(0);
+
+  useEffect(() => {
+    saveSet(SOURCE_FILTERS_KEY, sourceFilters);
+  }, [sourceFilters]);
+
+  useEffect(() => {
+    saveSet(TIER_FILTERS_KEY, tierFilters);
+  }, [tierFilters]);
 
   // Tick down cooldown every second; reads persisted timestamp so closing the
   // tab and reopening still respects the rate limit.
