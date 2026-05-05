@@ -3,6 +3,7 @@ import { IntelItem } from "@/types";
 import { fetchFeedData } from "@/lib/dataFetcher";
 import { fetchExtraSourceData } from "@/lib/extraSourceFetcher";
 import { shouldKeepAggregatorItem } from "@/lib/contentGate";
+import { mergeWithPriorityRetention } from "@/lib/priorityRetention";
 import { Header, ViewMode, SourceFilter, TierFilter } from "@/components/Header";
 import { GridView } from "@/components/GridView";
 import { SwipeView } from "@/components/SwipeView";
@@ -40,7 +41,7 @@ async function loadAllFeedData(forceRefresh = false): Promise<IntelItem[]> {
     }
   }
 
-  return [...byId.values()].sort((a, b) => b.publishedAt.getTime() - a.publishedAt.getTime());
+  return mergeWithPriorityRetention([...byId.values()]);
 }
 
 function loadSavedSet<T extends string>(key: string, validValues: readonly T[]): Set<T> {
