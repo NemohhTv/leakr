@@ -5,6 +5,26 @@ const router = Router();
 const imageCache = new Map<string, { value: string | null; ts: number }>();
 const IMAGE_CACHE_TTL_MS = 30 * 60 * 1000;
 
+const PRIORITY_SEARCH_TERMS = [
+  "Resident Evil Requiem",
+  "Resident Evil 9",
+  "GTA 6",
+  "GTA VI",
+  "Grand Theft Auto VI",
+  "Assassin's Creed",
+  "Black Flag",
+  "Marvel's Wolverine",
+  "Wolverine",
+  "LEGO Batman",
+  "Fallout",
+  "God of War",
+  "The Witcher",
+  "Witcher 4",
+  "Red Dead Redemption",
+  "Red Dead Redemption 2",
+  "RDR2",
+];
+
 function decodeHtml(value: string): string {
   return value
     .replace(/&quot;/g, '"')
@@ -99,11 +119,11 @@ function extractEntries(xml: string): string[] {
   return [...xml.matchAll(/<entry>([\s\S]*?)<\/entry>/g)].map(match => match[0]);
 }
 
-function mergeAtomEntries(xml1: string, xml2: string): string[] {
+function mergeEntryLists(lists: string[][]): string[] {
   const seen = new Set<string>();
   const all: string[] = [];
 
-  for (const entry of [...extractEntries(xml1), ...extractEntries(xml2)]) {
+  for (const entry of lists.flat()) {
     const url = entry.match(/<link[^>]+href="([^"]+)"/)?.[1];
     if (url && !seen.has(url)) {
       seen.add(url);
@@ -165,13 +185,26 @@ async function buildThumbnails(entries: string[]): Promise<Record<string, string
   return thumbnails;
 }
 
+async function fetchPrioritySearchEntries(subreddit: string): Promise<string[]> {
+  const results = await Promise.allSettled(
+    PRIORITY_SEARCH_TERMS.map(async term => {
+      const query = encodeURIComponent(term);
+      const xml = await fetchRedditAtom(`https://www.reddit.com/r/${subreddit}/search.rss?q=${query}&restrict_sr=on&sort=new&t=month&limit=5`);
+      return extractEntries(xml);
+    }),
+  );
+
+  return results.flatMap(result => result.status === "fulfilled" ? result.value : []);
+}
+
 async function buildCombinedRedditFeed(subreddit: string): Promise<{ xml: string; thumbnails: Record<string, string> }> {
-  const [topXml, newXml] = await Promise.all([
+  const [topXml, newXml, priorityEntries] = await Promise.all([
     fetchRedditAtom(`https://www.reddit.com/r/${subreddit}/top.rss?limit=10&t=week`),
     fetchRedditAtom(`https://www.reddit.com/r/${subreddit}/new.rss?limit=10`),
+    fetchPrioritySearchEntries(subreddit),
   ]);
 
-  const entries = mergeAtomEntries(topXml, newXml);
+  const entries = mergeEntryLists([extractEntries(topXml), extractEntries(newXml), priorityEntries]).slice(0, 120);
   const thumbnails = await buildThumbnails(entries);
 
   return {
