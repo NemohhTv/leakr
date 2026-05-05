@@ -1,7 +1,7 @@
 import { IntelItem } from "../types";
 
 const RETENTION_KEY = "leakr_priority_retained_items_v1";
-const PRIORITY_RETENTION_MS = 60 * 24 * 60 * 60 * 1000; // 60 days
+const PRIORITY_RETENTION_MS = 3 * 24 * 60 * 60 * 1000; // 3 days
 const MAX_RETAINED_ITEMS = 120;
 
 const PRIORITY_GAME_PATTERNS: RegExp[] = [
